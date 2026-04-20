@@ -1,0 +1,4 @@
+module SDWebImage {
+umbrella header "/Users/liangbao/Library/Developer/Xcode/DerivedData/FourD4Y-ecwmmrtgebsrqvfhlwxwpujuhlkd/SourcePackages/checkouts/SDWebImage/SDWebImage/include/SDWebImage/SDWebImage.h"
+export *
+}

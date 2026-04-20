@@ -1,0 +1,118 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+# FourD4Y iOS App
+
+## 项目概述
+
+iOS 客户端应用，连接至 4D4Y 论坛 (https://www.4d4y.com)。论坛采用 Discuz! 7.2，使用 GBK 编码。
+
+## 技术栈
+
+- **UI框架**: UIKit + WebKit (WKWebView)
+- **网络库**: URLSession (通过 NetworkManager 单例管理)
+- **图片加载**: SDWebImage
+- **HTML解析**: SwiftSoup
+- **登录凭证**: 存储在 UserDefaults + HTTPCookieStorage
+
+## 项目结构
+
+```
+Sources/
+├── AppDelegate.swift
+├── MainViewController.swift
+├── ForumManager.swift              # 论坛板块管理 (UserDefaults 存储)
+├── LoginManager.swift              # 登录认证 (JavaScript 注入)
+├── Network/
+│   └── NetworkManager.swift        # 网络请求 + HTML 解析入口
+├── Parser/
+│   └── ForumHTMLParser.swift      # HTML 解析 (SwiftSoup, GBK 编码)
+├── Managers/
+│   ├── CacheManager.swift         # 磁盘缓存 (5分钟过期, 50MB上限)
+│   └── ReadTracker.swift          # 已读帖子追踪
+├── Models/                         # Codable 数据模型
+│   ├── Forum.swift, ForumThread.swift, ForumPost.swift
+│   ├── ThreadDetail.swift, SearchResult.swift
+│   ├── ForumUser.swift, PrivateMessage.swift, PMDetail.swift
+├── ViewControllers/               # UIKit 视图控制器
+│   ├── MainTabBarController.swift, HomeViewController.swift
+│   ├── ForumListViewController.swift, ThreadListViewController.swift
+│   ├── ThreadDetailViewController.swift, ReplyViewController.swift
+│   ├── NewThreadViewController.swift, LoginViewController.swift
+│   ├── SearchViewController.swift, ProfileViewController.swift
+│   ├── PMListViewController.swift, PMDetailViewController.swift
+│   └── NotificationsViewController.swift, ExploreViewController.swift
+└── Views/
+    ├── ThreadCell.swift
+    └── Theme.swift
+```
+
+## 构建
+
+```bash
+xcodegen generate        # 生成 .xcodeproj
+xcodebuild -project FourD4Y.xcodeproj -scheme FourD4Y -configuration Debug build
+```
+
+依赖: SwiftSoup (HTML解析), SDWebImage (图片加载), CommonCrypto (MD5)
+
+## 核心架构
+
+### Cookie 认证同步
+- URLSession 和 WKWebView 共享 `HTTPCookieStorage.shared`
+- `LoginManager.restoreCookies()` 在启动时恢复 Cookie
+- 登录通过 WKWebView JavaScript 注入执行（不是 URLSession），以确保 Cookie 同步
+
+### HTML 解析策略
+- `ForumHTMLParser` 使用 SwiftSoup 解析所有页面
+- 编码尝试顺序: GB18030 → GB2312 → UTF-8 → WindowsCP1252
+- 缓存: `CacheManager` 提供 5 分钟过期的磁盘缓存
+
+### 发帖/回复提交流程
+- **必须通过 WKWebView 执行 JavaScript 提交**，不能用原生 URLSession
+- 原因: Cookie 需要从 WKWebView 同步到服务器
+- 表单字段从页面 HTML 提取 (formhash, posttime, typeid 等)
+
+## 论坛 URL
+
+- 首页: `https://www.4d4y.com/forum/`
+- 板块: `forumdisplay.php?fid={fid}`
+- 帖子: `viewthread.php?tid={tid}`
+- 发帖: `post.php?action=newthread&fid={fid}`
+- 回复: `post.php?action=reply&tid={tid}&reppost={pid}`
+
+## 编码规范
+
+### JavaScript 字符串
+Swift 中嵌入 JavaScript 必须用原始字符串：
+
+```swift
+// 正确
+webView.evaluateJavaScript(#"""
+    var regex = /<option[^>]*value="([^"]*)"[^>]*>([^<]*)<\/option>/g;
+"""#)
+
+// 错误 - \n \r 等会被 Swift 解析
+webView.evaluateJavaScript("""
+    var regex = /<option[^>]*value="([^"]*)"[^>]*>([^<]*)<\\/option>/g;
+""")
+```
+
+## 常见问题
+
+### Cookie 同步
+- 关键 Cookie: `cdb_auth`, `cdb_sid`, `cdb_cookietime`
+- URLSession 和 WKWebView 共享 `HTTPCookieStorage.shared`
+- 启动时 `LoginManager.restoreCookies()` 恢复 Cookie
+
+### formhash
+- 每次进入发帖页面获取新的 formhash
+- 必须从页面提取，不能缓存
+
+### typeid 分类
+- 每个板块的分类不同，从 `<select id="typeid">` 提取
+- 某些板块 JS 动态渲染，需在 `didFinish` 后延迟 1 秒再提取
+
+### Cloudflare
+- WKWebView 自动处理

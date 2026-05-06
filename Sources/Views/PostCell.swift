@@ -35,6 +35,12 @@ class PostCell: UITableViewCell {
     private var imageViews: [UIImageView] = []
     private var currentPost: ForumPost?
     private var currentImageURLs: [String] = []
+    private var filteredImageURLs: [String] = [] // Store filtered URLs without GIFs
+    private var contentLabelBottomConstraint: NSLayoutConstraint?
+    private var imagesContainerBottomConstraint: NSLayoutConstraint?
+    private var imagesContainerTopConstraint: NSLayoutConstraint?
+    private var statsContainerTopConstraint: NSLayoutConstraint?
+    private var replyButtonTopConstraint: NSLayoutConstraint?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -49,93 +55,105 @@ class PostCell: UITableViewCell {
         selectionStyle = .none
         backgroundColor = Theme.background
 
-        // Container card
+        // Container card with elevated effect
         containerView.backgroundColor = Theme.card
-        containerView.layer.cornerRadius = 16
+        containerView.layer.cornerRadius = Theme.largeRadius
         containerView.layer.borderColor = Theme.border.cgColor
         containerView.layer.borderWidth = 1
 
-        // Avatar
+        // Subtle shadow for depth
+        containerView.layer.shadowColor = UIColor.black.cgColor
+        containerView.layer.shadowOpacity = 0.25
+        containerView.layer.shadowOffset = CGSize(width: 0, height: 4)
+        containerView.layer.shadowRadius = 16
+        containerView.layer.masksToBounds = false
+
+        // Avatar with gradient ring
         avatarView.backgroundColor = Theme.muted
         avatarView.contentMode = .scaleAspectFill
-        avatarView.layer.cornerRadius = 20
+        avatarView.layer.cornerRadius = 18
         avatarView.layer.masksToBounds = true
-        avatarView.layer.borderColor = Theme.border.cgColor
-        avatarView.layer.borderWidth = 2
+        avatarView.layer.borderColor = Theme.primary.cgColor
+        avatarView.layer.borderWidth = 2.5
         avatarView.image = UIImage(systemName: "person.circle.fill")
         avatarView.tintColor = Theme.secondaryText
 
-        // Author name
-        authorNameLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        // Author name with weight
+        authorNameLabel.font = .systemFont(ofSize: 16, weight: .semibold)
         authorNameLabel.textColor = Theme.titleText
 
-        // Pinned badge
-        pinnedBadge.backgroundColor = Theme.primary.withAlphaComponent(0.12)
-        pinnedBadge.layer.cornerRadius = 6
+        // Pinned badge with gradient
+        pinnedBadge.backgroundColor = Theme.primary.withAlphaComponent(0.15)
+        pinnedBadge.layer.cornerRadius = 8
 
         pinIcon.image = UIImage(systemName: "pin.fill")
         pinIcon.tintColor = Theme.primary
         pinIcon.contentMode = .scaleAspectFit
 
         pinnedLabel.text = "置顶"
-        pinnedLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        pinnedLabel.font = .systemFont(ofSize: 12, weight: .bold)
         pinnedLabel.textColor = Theme.primary
 
-        // Date
+        // Date with subtle styling
         dateLabel.font = .systemFont(ofSize: 13)
         dateLabel.textColor = Theme.secondaryText
 
-        // Floor label
-        floorLabel.font = .systemFont(ofSize: 12, weight: .medium)
-        floorLabel.textColor = Theme.secondaryText
+        // Floor label with accent
+        floorLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        floorLabel.textColor = Theme.accent
         floorLabel.textAlignment = .right
 
-        // Title
-        titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        // Title with emphasis
+        titleLabel.font = .systemFont(ofSize: 18, weight: .bold)
         titleLabel.textColor = Theme.titleText
         titleLabel.numberOfLines = 2
 
         // Content preview
-        contentLabel.font = .systemFont(ofSize: 15)
+        contentLabel.font = .systemFont(ofSize: 15, weight: .regular)
         contentLabel.textColor = Theme.bodyText
         contentLabel.numberOfLines = 0
 
-        // Stats container
-        replyIcon.image = UIImage(systemName: "message-square")
-        replyIcon.tintColor = Theme.secondaryText
+        // Stats container with glass effect
+        statsContainer.backgroundColor = Theme.secondary
+        statsContainer.layer.cornerRadius = 10
+
+        replyIcon.image = UIImage(systemName: "message.fill")
+        replyIcon.tintColor = Theme.accent
         replyIcon.contentMode = .scaleAspectFit
 
-        replyLabel.font = .systemFont(ofSize: 13)
+        replyLabel.font = .systemFont(ofSize: 13, weight: .medium)
         replyLabel.textColor = Theme.secondaryText
 
         replyCountView.axis = .horizontal
-        replyCountView.spacing = 4
+        replyCountView.spacing = 5
         replyCountView.alignment = .center
-        replyCountView.addArrangedSubview(replyIcon)
         replyCountView.addArrangedSubview(replyLabel)
 
-        viewIcon.image = UIImage(systemName: "eye")
+        viewIcon.image = UIImage(systemName: "eye.fill")
         viewIcon.tintColor = Theme.secondaryText
         viewIcon.contentMode = .scaleAspectFit
 
-        viewLabel.font = .systemFont(ofSize: 13)
+        viewLabel.font = .systemFont(ofSize: 13, weight: .medium)
         viewLabel.textColor = Theme.secondaryText
 
         viewCountView.axis = .horizontal
-        viewCountView.spacing = 4
+        viewCountView.spacing = 5
         viewCountView.alignment = .center
-        viewCountView.addArrangedSubview(viewIcon)
         viewCountView.addArrangedSubview(viewLabel)
 
-        // Reply button
+        // Reply button with accent styling
         replyButton.setTitle("回复", for: .normal)
         replyButton.setTitleColor(Theme.primary, for: .normal)
-        replyButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
+        replyButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
+        replyButton.backgroundColor = Theme.primary.withAlphaComponent(0.12)
+        replyButton.layer.cornerRadius = 8
+        replyButton.contentEdgeInsets = UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
         replyButton.addTarget(self, action: #selector(replyTapped), for: .touchUpInside)
+        replyButton.translatesAutoresizingMaskIntoConstraints = false
 
         // Images container and stack view
         imagesStackView.axis = .vertical
-        imagesStackView.spacing = 8
+        imagesStackView.spacing = 10
         imagesStackView.distribution = .fill
         imagesContainer.addSubview(imagesStackView)
         imagesContainer.isHidden = true
@@ -183,25 +201,26 @@ class PostCell: UITableViewCell {
         containerView.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
-            // Container - pinned to content view
+            // Container - 更紧凑的内边距
             containerView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
-            containerView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            containerView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            containerView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            containerView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
             containerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
 
-            // Avatar
-            avatarView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 16),
-            avatarView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
-            avatarView.widthAnchor.constraint(equalToConstant: 40),
-            avatarView.heightAnchor.constraint(equalToConstant: 40),
+            // Avatar - 稍小尺寸，更紧凑
+            avatarView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 12),
+            avatarView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 12),
+            avatarView.widthAnchor.constraint(equalToConstant: 36),
+            avatarView.heightAnchor.constraint(equalToConstant: 36),
 
             // Author name
-            authorNameLabel.topAnchor.constraint(equalTo: avatarView.topAnchor, constant: 2),
-            authorNameLabel.leadingAnchor.constraint(equalTo: avatarView.trailingAnchor, constant: 12),
+            authorNameLabel.topAnchor.constraint(equalTo: avatarView.topAnchor, constant: 0),
+            authorNameLabel.leadingAnchor.constraint(equalTo: avatarView.trailingAnchor, constant: 10),
 
-            // Floor label (right side)
-            floorLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 16),
-            floorLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
+            // Floor label (right side) - 更紧凑
+            floorLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 12),
+            floorLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
+            floorLabel.widthAnchor.constraint(equalToConstant: 45),
 
             // Pinned badge
             pinnedBadge.centerYAnchor.constraint(equalTo: authorNameLabel.centerYAnchor),
@@ -213,57 +232,55 @@ class PostCell: UITableViewCell {
             pinIcon.widthAnchor.constraint(equalToConstant: 12),
             pinIcon.heightAnchor.constraint(equalToConstant: 12),
 
-            pinnedLabel.leadingAnchor.constraint(equalTo: pinIcon.trailingAnchor, constant: 2),
+            pinnedLabel.leadingAnchor.constraint(equalTo: pinIcon.trailingAnchor, constant: 3),
             pinnedLabel.trailingAnchor.constraint(equalTo: pinnedBadge.trailingAnchor, constant: -6),
             pinnedLabel.centerYAnchor.constraint(equalTo: pinnedBadge.centerYAnchor),
 
             // Date
-            dateLabel.topAnchor.constraint(equalTo: authorNameLabel.bottomAnchor, constant: 4),
+            dateLabel.topAnchor.constraint(equalTo: authorNameLabel.bottomAnchor, constant: 2),
             dateLabel.leadingAnchor.constraint(equalTo: authorNameLabel.leadingAnchor),
 
-            // Title - below avatar
-            titleLabel.topAnchor.constraint(equalTo: avatarView.bottomAnchor, constant: 14),
-            titleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
-            titleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
+            // Title - 仅楼主贴显示，更紧凑
+            titleLabel.topAnchor.constraint(equalTo: avatarView.bottomAnchor, constant: 10),
+            titleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 12),
+            titleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
 
-            // Content - below title
-            contentLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
-            contentLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
-            contentLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
+            // Content - 核心内容区域，减少顶部间距
+            contentLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
+            contentLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 12),
+            contentLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
 
-            // Stats container - below content
-            statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 14),
-            statsContainer.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
-            statsContainer.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
-            statsContainer.heightAnchor.constraint(equalToConstant: 24),
+            // Stats container - 仅楼主贴显示，放在内容下方（动态约束）
+            statsContainer.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 12),
+            statsContainer.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
+            statsContainer.heightAnchor.constraint(equalToConstant: 28),
 
-            replyCountView.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor),
+            replyCountView.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor, constant: 8),
             replyCountView.centerYAnchor.constraint(equalTo: statsContainer.centerYAnchor),
 
-            replyIcon.widthAnchor.constraint(equalToConstant: 16),
-            replyIcon.heightAnchor.constraint(equalToConstant: 16),
+            replyIcon.widthAnchor.constraint(equalToConstant: 14),
+            replyIcon.heightAnchor.constraint(equalToConstant: 14),
 
             viewCountView.leadingAnchor.constraint(equalTo: replyCountView.trailingAnchor, constant: 16),
             viewCountView.centerYAnchor.constraint(equalTo: statsContainer.centerYAnchor),
 
-            viewIcon.widthAnchor.constraint(equalToConstant: 16),
-            viewIcon.heightAnchor.constraint(equalToConstant: 16),
+            viewIcon.widthAnchor.constraint(equalToConstant: 14),
+            viewIcon.heightAnchor.constraint(equalToConstant: 14),
 
-            // Reply button
-            replyButton.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor),
-            replyButton.centerYAnchor.constraint(equalTo: statsContainer.centerYAnchor),
-
-            // Images container - below stats
-            imagesContainer.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 12),
-            imagesContainer.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
-            imagesContainer.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
-            imagesContainer.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -16),
+            // Images container
+            imagesContainer.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 12),
+            imagesContainer.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
 
             // Images stack view fills container
             imagesStackView.topAnchor.constraint(equalTo: imagesContainer.topAnchor),
             imagesStackView.leadingAnchor.constraint(equalTo: imagesContainer.leadingAnchor),
             imagesStackView.trailingAnchor.constraint(equalTo: imagesContainer.trailingAnchor),
-            imagesStackView.bottomAnchor.constraint(equalTo: imagesContainer.bottomAnchor)
+            imagesStackView.bottomAnchor.constraint(equalTo: imagesContainer.bottomAnchor),
+
+            // Reply button - 单独一行，位于卡片底部
+            // 注意：这里不设置固定的 top 约束，而是在 configure:with: 中动态设置
+            replyButton.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
+            replyButton.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -12)
         ])
     }
 
@@ -274,10 +291,71 @@ class PostCell: UITableViewCell {
         // Floor label
         floorLabel.text = "#\(post.floorNumber)楼"
 
-        // Title
+        // Title - 仅楼主贴（1楼）显示
         let title = post.title ?? ""
         titleLabel.text = title.isEmpty ? "" : title
-        titleLabel.isHidden = title.isEmpty
+        let isFloorOne = post.floorNumber == 1
+        titleLabel.isHidden = !isFloorOne || title.isEmpty
+
+        // 清除之前的动态约束
+        contentLabelBottomConstraint?.isActive = false
+        contentLabelBottomConstraint = nil
+        imagesContainerBottomConstraint?.isActive = false
+        imagesContainerBottomConstraint = nil
+        imagesContainerTopConstraint?.isActive = false
+        imagesContainerTopConstraint = nil
+        statsContainerTopConstraint?.isActive = false
+        statsContainerTopConstraint = nil
+        replyButtonTopConstraint?.isActive = false
+        replyButtonTopConstraint = nil
+
+        let hasImages = !post.images.isEmpty
+
+        // 回复按钮始终显示，在最底部单独一行
+        replyButton.isHidden = false
+
+        if isFloorOne {
+            // 楼主贴：显示 statsContainer（回复数/浏览数）
+            statsContainer.isHidden = false
+            replyLabel.text = "\(post.floorNumber)"
+            viewLabel.text = "\(post.viewCount)"
+
+            if hasImages {
+                // 有图片：statsContainer -> imagesContainer -> replyButton
+                imagesContainer.isHidden = false
+                statsContainerTopConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
+                statsContainerTopConstraint?.isActive = true
+                imagesContainerTopConstraint = imagesContainer.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 10)
+                imagesContainerTopConstraint?.isActive = true
+                imagesContainerBottomConstraint = imagesContainer.bottomAnchor.constraint(equalTo: replyButton.topAnchor, constant: -10)
+                imagesContainerBottomConstraint?.isActive = true
+            } else {
+                // 无图片：statsContainer -> replyButton
+                imagesContainer.isHidden = true
+                statsContainerTopConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
+                statsContainerTopConstraint?.isActive = true
+                // statsContainer.bottomAnchor 连接到 replyButton.topAnchor（通过 replyButton 的 bottom 约束固定）
+            }
+        } else {
+            // 回复贴：隐藏 statsContainer
+            statsContainer.isHidden = true
+            statsContainerTopConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
+            statsContainerTopConstraint?.isActive = true
+
+            if hasImages {
+                // 有图片：imagesContainer -> replyButton
+                imagesContainer.isHidden = false
+                imagesContainerTopConstraint = imagesContainer.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 10)
+                imagesContainerTopConstraint?.isActive = true
+                imagesContainerBottomConstraint = imagesContainer.bottomAnchor.constraint(equalTo: replyButton.topAnchor, constant: -10)
+                imagesContainerBottomConstraint?.isActive = true
+            } else {
+                // 无图片：contentLabel -> replyButton（statsContainer 被隐藏，高度为0）
+                imagesContainer.isHidden = true
+                replyButtonTopConstraint = replyButton.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 10)
+                replyButtonTopConstraint?.isActive = true
+            }
+        }
 
         // Content with proper formatting
         let contentText = post.content
@@ -285,10 +363,6 @@ class PostCell: UITableViewCell {
 
         // Hide pinned badge by default
         pinnedBadge.isHidden = true
-
-        // Stats
-        replyLabel.text = "\(post.floorNumber)"
-        viewLabel.text = "\(post.viewCount)"
 
         // Store post for reply action
         currentPost = post
@@ -302,6 +376,27 @@ class PostCell: UITableViewCell {
 
         // Configure images
         configureImages(post.images)
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        avatarView.image = UIImage(systemName: "person.circle.fill")
+        // 重置动态约束
+        contentLabelBottomConstraint?.isActive = false
+        contentLabelBottomConstraint = nil
+        imagesContainerBottomConstraint?.isActive = false
+        imagesContainerBottomConstraint = nil
+        imagesContainerTopConstraint?.isActive = false
+        imagesContainerTopConstraint = nil
+        statsContainerTopConstraint?.isActive = false
+        statsContainerTopConstraint = nil
+        replyButtonTopConstraint?.isActive = false
+        replyButtonTopConstraint = nil
+        // 重置隐藏状态
+        statsContainer.isHidden = false
+        replyButton.isHidden = false
+        imagesContainer.isHidden = true
+        titleLabel.isHidden = false
     }
 
     func configure(with thread: ForumThread) {
@@ -333,14 +428,18 @@ class PostCell: UITableViewCell {
             view.removeFromSuperview()
         }
 
-        if imageURLs.isEmpty {
+        // Filter out GIF images - these are emoticons and should display inline in content
+        let filtered = imageURLs
+        filteredImageURLs = filtered
+
+        if filtered.isEmpty {
             imagesContainer.isHidden = true
             return
         }
 
         imagesContainer.isHidden = false
 
-        for (index, imageURL) in imageURLs.prefix(3).enumerated() {
+        for (index, imageURL) in filtered.prefix(3).enumerated() {
             let imageView = UIImageView()
             imageView.contentMode = .scaleAspectFill
             imageView.backgroundColor = Theme.muted
@@ -379,9 +478,9 @@ class PostCell: UITableViewCell {
         guard let imageView = gesture.view as? UIImageView else { return }
         let tappedIndex = imageView.tag
 
-        // Get the image URL for full resolution loading
-        if tappedIndex < currentImageURLs.count {
-            let imageURL = currentImageURLs[tappedIndex]
+        // Use filteredImageURLs since it excludes GIFs
+        if tappedIndex < filteredImageURLs.count {
+            let imageURL = filteredImageURLs[tappedIndex]
             showFullScreenImage(withURL: imageURL, placeholder: imageView.image)
         } else if let image = imageView.image {
             // Fallback to thumbnail

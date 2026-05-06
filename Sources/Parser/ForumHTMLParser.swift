@@ -397,61 +397,93 @@ class ForumHTMLParser {
             content = try cell.text()
             print("[parsePostDiv] Found content: \(content.prefix(50))...")
 
-            // Get full HTML to extract image URLs
-            if let htmlContent = try? cell.html() {
-                // Extract image URLs from zoom(this, 'url') pattern
-                // Pattern: zoom(this, 'https://...')
+            let baseURL = "https://www.4d4y.com/forum/"
+
+            // Extract images using SwiftSoup
+            let imgElements = try cell.select("img")
+            for img in imgElements {
+                // Discuz stores full-size URL in "file" or "zoomfile" attribute, thumbnail in "src"
+                let fileURL = try img.attr("file")
+                let zoomfileURL = try img.attr("zoomfile")
+                let srcURL = try img.attr("src")
+                var url = !fileURL.isEmpty ? fileURL : (!zoomfileURL.isEmpty ? zoomfileURL : srcURL)
+
+                guard !url.isEmpty else { continue }
+
+                // Handle relative URLs (e.g. attachment.php?aid=XXXXX)
+                if !url.hasPrefix("http") {
+                    url = baseURL + url
+                }
+
+                guard !images.contains(url) else { continue }
+
+                let lowered = url.lowercased()
+
+                // Skip emoticons/smilies
+                if lowered.contains("images/smilies/") || lowered.contains("smiley") || lowered.contains("emoticon") {
+                    continue
+                }
+
+                // Skip UI icons
+                let excludedPatterns = ["back.gif", "forward.gif", "reply.gif", "new_pm.gif", "post_thumb", "icon", "logo", "button", "attachimg.gif", "images/common/", "images/default/"]
+                let isExcluded = excludedPatterns.contains { lowered.contains($0) }
+                guard !isExcluded else { continue }
+
+                images.append(url)
+                print("[parsePostDiv] Found image: \(url)")
+            }
+
+            // Also extract from attachment list blocks (t_attachlist)
+            let attachDLs = try cell.select("dl.t_attachlist img")
+            for img in attachDLs {
+                let fileURL = try img.attr("file")
+                let zoomfileURL = try img.attr("zoomfile")
+                let srcURL = try img.attr("src")
+                var url = !fileURL.isEmpty ? fileURL : (!zoomfileURL.isEmpty ? zoomfileURL : srcURL)
+
+                guard !url.isEmpty else { continue }
+                if !url.hasPrefix("http") {
+                    url = baseURL + url
+                }
+                if !images.contains(url) {
+                    images.append(url)
+                    print("[parsePostDiv] Found attachment list image: \(url)")
+                }
+            }
+
+            // Extract images from sibling postattachlist div (Discuz stores attachments outside t_msgfont)
+            // Only use zoom pattern to get full-size URLs, skip SwiftSoup img selection to avoid duplicates
+            if let postattachlist = try? postDiv.select("div.postattachlist").first(),
+               let htmlContent = try? postattachlist.html() {
                 let zoomPattern = #"zoom\(this,\s*'([^']+)'"#
                 if let regex = try? NSRegularExpression(pattern: zoomPattern, options: []) {
                     let range = NSRange(htmlContent.startIndex..., in: htmlContent)
                     let matches = regex.matches(in: htmlContent, options: [], range: range)
                     for match in matches {
                         if let urlRange = Range(match.range(at: 1), in: htmlContent) {
-                            let url = String(htmlContent[urlRange])
-                            if url.hasPrefix("http") && !images.contains(url) {
+                            var url = String(htmlContent[urlRange])
+                            if !url.hasPrefix("http") { url = baseURL + url }
+                            if !images.contains(url) {
                                 images.append(url)
+                                print("[parsePostDiv] Found postattachlist image: \(url)")
                             }
                         }
                     }
                 }
+            }
 
-                // Also try href pattern for direct links (e.g., <a href="..."><img...></a>)
-                let hrefPattern = #"<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>.*?<img[^>]+src=[\"']([^\"']+)[\"']"#
-                if let regex = try? NSRegularExpression(pattern: hrefPattern, options: [.dotMatchesLineSeparators]) {
+            // Supplement with zoom pattern from HTML
+            if let htmlContent = try? cell.html() {
+                let zoomPattern = #"zoom\(this,\s*'([^']+)'"#
+                if let regex = try? NSRegularExpression(pattern: zoomPattern, options: []) {
                     let range = NSRange(htmlContent.startIndex..., in: htmlContent)
                     let matches = regex.matches(in: htmlContent, options: [], range: range)
                     for match in matches {
-                        if let hrefRange = Range(match.range(at: 1), in: htmlContent) {
-                            let hrefURL = String(htmlContent[hrefRange])
-                            // Check if href looks like an image URL (has image extension or attachment)
-                            if hrefURL.hasPrefix("http") &&
-                               (hrefURL.contains("attachment") || hrefURL.contains("image") || isLikelyImageURL(hrefURL)) &&
-                               !images.contains(hrefURL) {
-                                images.append(hrefURL)
-                            }
-                        }
-                    }
-                }
-
-                // Fallback: extract from src if no zoom pattern found
-                if images.isEmpty {
-                    let srcPattern = #"src=[\"']([^\"']+)[\"']"#
-                    if let regex = try? NSRegularExpression(pattern: srcPattern, options: []) {
-                        let range = NSRange(htmlContent.startIndex..., in: htmlContent)
-                        let matches = regex.matches(in: htmlContent, options: [], range: range)
-                        for match in matches {
-                            if let urlRange = Range(match.range(at: 1), in: htmlContent) {
-                                let url = String(htmlContent[urlRange])
-                                // Only exclude specific navigation/icon images
-                                let excludedPatterns = ["back.gif", "forward.gif", "reply.gif", "new_pm.gif", "post_thumbia", "small", "icon"]
-                                let isExcluded = excludedPatterns.contains { url.lowercased().contains($0) }
-                                // Only use image URLs that are likely actual post content images
-                                if url.hasPrefix("http") && !url.contains(".thumb") && !url.contains("_small") && !isExcluded && !images.contains(url) {
-                                    // More permissive - accept any URL that looks like an image
-                                    if isLikelyImageURL(url) {
-                                        images.append(url)
-                                    }
-                                }
+                        if let urlRange = Range(match.range(at: 1), in: htmlContent) {
+                            var url = String(htmlContent[urlRange])
+                            if !url.hasPrefix("http") { url = baseURL + url }
+                            if !images.contains(url) {
+                                images.append(url)
                             }
                         }
                     }

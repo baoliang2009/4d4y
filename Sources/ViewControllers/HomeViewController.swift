@@ -51,7 +51,7 @@ class HomeViewController: UIViewController {
     }
 
     private func setupUI() {
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
 
         // Scroll view with refresh control
         view.addSubview(scrollView)
@@ -92,12 +92,12 @@ class HomeViewController: UIViewController {
     private func setupHeader() {
         headerLabel.text = "论坛列表"
         headerLabel.font = .systemFont(ofSize: 28, weight: .bold)
-        headerLabel.textColor = Theme.titleText
+        headerLabel.textColor = Theme.currentForeground
         contentView.addSubview(headerLabel)
 
         subtitleLabel.text = "浏览所有版块"
         subtitleLabel.font = .systemFont(ofSize: 14)
-        subtitleLabel.textColor = Theme.secondaryText
+        subtitleLabel.textColor = Theme.currentSecondaryText
         contentView.addSubview(subtitleLabel)
 
         headerLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -115,7 +115,7 @@ class HomeViewController: UIViewController {
     private func setupHotTopics() {
         hotTopicsLabel.text = "热门话题"
         hotTopicsLabel.font = .systemFont(ofSize: 16, weight: .semibold)
-        hotTopicsLabel.textColor = Theme.titleText
+        hotTopicsLabel.textColor = Theme.currentForeground
         contentView.addSubview(hotTopicsLabel)
 
         let fireIcon = UIImageView(image: UIImage(systemName: "flame.fill"))
@@ -123,9 +123,9 @@ class HomeViewController: UIViewController {
         fireIcon.contentMode = .scaleAspectFit
         contentView.addSubview(fireIcon)
 
-        hotTopicsContainer.backgroundColor = Theme.card
+        hotTopicsContainer.backgroundColor = Theme.currentCard
         hotTopicsContainer.layer.cornerRadius = 16
-        hotTopicsContainer.layer.borderColor = Theme.border.cgColor
+        hotTopicsContainer.layer.borderColor = Theme.currentBorder.cgColor
         hotTopicsContainer.layer.borderWidth = 1
         contentView.addSubview(hotTopicsContainer)
 
@@ -161,7 +161,7 @@ class HomeViewController: UIViewController {
     private func setupForumsGrid() {
         allForumsLabel.text = "所有板块"
         allForumsLabel.font = .systemFont(ofSize: 16, weight: .semibold)
-        allForumsLabel.textColor = Theme.titleText
+        allForumsLabel.textColor = Theme.currentForeground
         contentView.addSubview(allForumsLabel)
 
         editButton.setTitle("编辑", for: .normal)
@@ -341,7 +341,7 @@ class HomeViewController: UIViewController {
 
             if index < hotThreads.count - 1 {
                 let divider = UIView()
-                divider.backgroundColor = Theme.border
+                divider.backgroundColor = Theme.currentBorder
                 divider.translatesAutoresizingMaskIntoConstraints = false
                 divider.heightAnchor.constraint(equalToConstant: 0.5).isActive = true
                 hotThreadsStackView.addArrangedSubview(divider)
@@ -359,7 +359,7 @@ class HomeViewController: UIViewController {
 
             if i < 4 {
                 let divider = UIView()
-                divider.backgroundColor = Theme.border
+                divider.backgroundColor = Theme.currentBorder
                 divider.translatesAutoresizingMaskIntoConstraints = false
                 divider.heightAnchor.constraint(equalToConstant: 0.5).isActive = true
                 hotThreadsStackView.addArrangedSubview(divider)
@@ -369,7 +369,7 @@ class HomeViewController: UIViewController {
 
     private func createHotThreadRow(index: Int, title: String, views: Int, replies: Int, thread: ForumThread?) -> UIView {
         let container = UIView()
-        container.backgroundColor = Theme.card
+        container.backgroundColor = Theme.currentCard
 
         let indexView = UIView()
         indexView.backgroundColor = Theme.primary.withAlphaComponent(0.15)
@@ -386,18 +386,18 @@ class HomeViewController: UIViewController {
         let titleLabel = UILabel()
         titleLabel.text = title
         titleLabel.font = .systemFont(ofSize: 14, weight: .medium)
-        titleLabel.textColor = Theme.titleText
+        titleLabel.textColor = Theme.currentForeground
         titleLabel.numberOfLines = 2
         container.addSubview(titleLabel)
 
         let statsLabel = UILabel()
         statsLabel.text = "\(views) 浏览 · \(replies) 回复"
         statsLabel.font = .systemFont(ofSize: 12)
-        statsLabel.textColor = Theme.secondaryText
+        statsLabel.textColor = Theme.currentSecondaryText
         container.addSubview(statsLabel)
 
         let arrowIcon = UIImageView(image: UIImage(systemName: "chevron.right"))
-        arrowIcon.tintColor = Theme.secondaryText
+        arrowIcon.tintColor = Theme.currentSecondaryText
         arrowIcon.contentMode = .scaleAspectFit
         container.addSubview(arrowIcon)
 
@@ -603,9 +603,9 @@ class ForumGridCell: UICollectionViewCell {
     }
 
     private func setupUI() {
-        containerView.backgroundColor = Theme.card
+        containerView.backgroundColor = Theme.currentCard
         containerView.layer.cornerRadius = 16
-        containerView.layer.borderColor = Theme.border.cgColor
+        containerView.layer.borderColor = Theme.currentBorder.cgColor
         containerView.layer.borderWidth = 1
         contentView.addSubview(containerView)
 
@@ -616,17 +616,17 @@ class ForumGridCell: UICollectionViewCell {
         containerView.addSubview(iconView)
 
         nameLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        nameLabel.textColor = Theme.titleText
+        nameLabel.textColor = Theme.currentForeground
         nameLabel.numberOfLines = 1
         containerView.addSubview(nameLabel)
 
         descLabel.font = .systemFont(ofSize: 11)
-        descLabel.textColor = Theme.secondaryText
+        descLabel.textColor = Theme.currentSecondaryText
         descLabel.numberOfLines = 2
         containerView.addSubview(descLabel)
 
         statsLabel.font = .systemFont(ofSize: 10)
-        statsLabel.textColor = Theme.secondaryText
+        statsLabel.textColor = Theme.currentSecondaryText
         containerView.addSubview(statsLabel)
 
         // Followed badge
@@ -724,6 +724,6 @@ class ForumGridCell: UICollectionViewCell {
 
         // Adjust border for edit mode
         containerView.layer.borderWidth = isEditMode ? 2 : 1
-        containerView.layer.borderColor = isEditMode ? Theme.primary.cgColor : Theme.border.cgColor
+        containerView.layer.borderColor = isEditMode ? Theme.primary.cgColor : Theme.currentBorder.cgColor
     }
 }

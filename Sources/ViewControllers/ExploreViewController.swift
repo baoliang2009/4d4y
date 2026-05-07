@@ -15,22 +15,22 @@ class ExploreViewController: UIViewController {
 
     private func setupUI() {
         title = "探索"
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
 
         // Search bar
         searchBar.placeholder = "搜索版块..."
         searchBar.searchBarStyle = .minimal
-        searchBar.barTintColor = Theme.background
+        searchBar.barTintColor = Theme.currentBackground
         searchBar.tintColor = Theme.primary
         if let textField = searchBar.value(forKey: "searchField") as? UITextField {
-            textField.textColor = Theme.foreground
-            textField.backgroundColor = Theme.muted
+            textField.textColor = Theme.currentForeground
+            textField.backgroundColor = Theme.currentMuted
         }
         searchBar.delegate = self
         view.addSubview(searchBar)
 
         // Table view
-        tableView.backgroundColor = Theme.background
+        tableView.backgroundColor = Theme.currentBackground
         tableView.separatorStyle = .none
         tableView.delegate = self
         tableView.dataSource = self

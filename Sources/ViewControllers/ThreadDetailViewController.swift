@@ -37,14 +37,14 @@ class ThreadDetailViewController: UIViewController {
 
     private func setupUI() {
         title = thread.displayTitle
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
 
         // Configure navigation bar appearance
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = Theme.card
-        appearance.titleTextAttributes = [.foregroundColor: Theme.foreground]
-        appearance.largeTitleTextAttributes = [.foregroundColor: Theme.foreground]
+        appearance.backgroundColor = Theme.currentCard
+        appearance.titleTextAttributes = [.foregroundColor: Theme.currentForeground]
+        appearance.largeTitleTextAttributes = [.foregroundColor: Theme.currentForeground]
         navigationController?.navigationBar.standardAppearance = appearance
         navigationController?.navigationBar.scrollEdgeAppearance = appearance
 
@@ -52,7 +52,7 @@ class ThreadDetailViewController: UIViewController {
         tableView.dataSource = self
         tableView.register(PostCell.self, forCellReuseIdentifier: PostCell.identifier)
         tableView.separatorStyle = .none
-        tableView.backgroundColor = Theme.background
+        tableView.backgroundColor = Theme.currentBackground
         view.addSubview(tableView)
 
         tableView.translatesAutoresizingMaskIntoConstraints = false
@@ -210,7 +210,6 @@ class ThreadDetailViewController: UIViewController {
     private var refreshControl: UIRefreshControl? {
         return tableView.refreshControl
     }
-}
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
@@ -219,6 +218,7 @@ class ThreadDetailViewController: UIViewController {
             ImagePrefetchManager.shared.cancelPrefetch(for: thread.tid)
         }
     }
+}
 
 extension ThreadDetailViewController: UITableViewDataSource, UITableViewDelegate {
 

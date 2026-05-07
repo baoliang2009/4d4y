@@ -29,14 +29,14 @@ class ThreadListViewController: UIViewController {
 
     private func setupUI() {
         title = forum.displayName
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
 
         // Configure navigation bar appearance
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = Theme.card
-        appearance.titleTextAttributes = [.foregroundColor: Theme.foreground]
-        appearance.largeTitleTextAttributes = [.foregroundColor: Theme.foreground]
+        appearance.backgroundColor = Theme.currentCard
+        appearance.titleTextAttributes = [.foregroundColor: Theme.currentForeground]
+        appearance.largeTitleTextAttributes = [.foregroundColor: Theme.currentForeground]
         navigationController?.navigationBar.standardAppearance = appearance
         navigationController?.navigationBar.scrollEdgeAppearance = appearance
 
@@ -44,7 +44,7 @@ class ThreadListViewController: UIViewController {
         tableView.dataSource = self
         tableView.register(ThreadCell.self, forCellReuseIdentifier: ThreadCell.identifier)
         tableView.separatorStyle = .none
-        tableView.backgroundColor = Theme.background
+        tableView.backgroundColor = Theme.currentBackground
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 100
         view.addSubview(tableView)
@@ -72,7 +72,7 @@ class ThreadListViewController: UIViewController {
 
         emptyLabel.text = "暂无帖子\n下拉刷新获取最新内容"
         emptyLabel.textAlignment = .center
-        emptyLabel.textColor = Theme.secondaryText
+        emptyLabel.textColor = Theme.currentSecondaryText
         emptyLabel.font = .systemFont(ofSize: 15)
         emptyLabel.numberOfLines = 0
         emptyLabel.isHidden = true

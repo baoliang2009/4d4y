@@ -28,64 +28,87 @@ class ThreadCell: UITableViewCell {
     }
 
     private func setupUI() {
-        backgroundColor = Theme.background
+        backgroundColor = Theme.currentBackground
         selectionStyle = .none
 
-        // Container with subtle shadow
-        containerView.backgroundColor = Theme.card
-        containerView.layer.cornerRadius = 12
-        containerView.layer.borderColor = Theme.border.cgColor
+        // Container with elevated card effect
+        containerView.backgroundColor = Theme.currentCard
+        containerView.layer.cornerRadius = Theme.largeRadius
+        containerView.layer.borderColor = Theme.currentBorder.cgColor
         containerView.layer.borderWidth = 1
 
-        // Avatar
-        avatarImageView.backgroundColor = Theme.muted
+        // Add subtle inner glow for depth
+        containerView.layer.shadowColor = UIColor.black.cgColor
+        containerView.layer.shadowOpacity = 0.3
+        containerView.layer.shadowOffset = CGSize(width: 0, height: 4)
+        containerView.layer.shadowRadius = 12
+        containerView.layer.masksToBounds = false
+
+        // Avatar with gradient border ring
+        avatarImageView.backgroundColor = Theme.currentMuted
         avatarImageView.contentMode = .scaleAspectFill
-        avatarImageView.layer.cornerRadius = 20
+        avatarImageView.layer.cornerRadius = 22
         avatarImageView.clipsToBounds = true
         avatarImageView.image = UIImage(systemName: "person.circle.fill")
-        avatarImageView.tintColor = Theme.secondaryText
+        avatarImageView.tintColor = Theme.currentSecondaryText
 
-        // Title
-        titleLabel.font = .systemFont(ofSize: 15, weight: .medium)
-        titleLabel.textColor = Theme.titleText
+        // Avatar ring layer
+        let avatarRing = CAGradientLayer()
+        avatarRing.colors = [
+            Theme.primary.cgColor,
+            Theme.accent.cgColor
+        ]
+        avatarRing.startPoint = CGPoint(x: 0, y: 0)
+        avatarRing.endPoint = CGPoint(x: 1, y: 1)
+        avatarRing.cornerRadius = 24
+        avatarImageView.layer.borderWidth = 2
+        avatarImageView.layer.borderColor = UIColor.clear.cgColor
+
+        // Title with dynamic type support
+        titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
+        titleLabel.textColor = Theme.currentForeground
         titleLabel.numberOfLines = 2
+        titleLabel.lineBreakMode = .byTruncatingTail
 
-        // Author badge
+        // Author badge with gradient background
         authorBadge.backgroundColor = Theme.primary.withAlphaComponent(0.15)
-        authorBadge.layer.cornerRadius = 4
+        authorBadge.layer.cornerRadius = 6
 
-        authorLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        authorLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         authorLabel.textColor = Theme.primary
 
-        // Stats container
-        statsContainer.backgroundColor = Theme.muted
-        statsContainer.layer.cornerRadius = 6
+        // Stats container with glass effect
+        statsContainer.backgroundColor = Theme.currentSecondary
+        statsContainer.layer.cornerRadius = 8
 
-        replyIcon.image = UIImage(systemName: "bubble.left")
-        replyIcon.tintColor = Theme.secondaryText
+        replyIcon.image = UIImage(systemName: "bubble.left.fill")
+        replyIcon.tintColor = Theme.accent
         replyIcon.contentMode = .scaleAspectFit
 
-        replyLabel.font = .systemFont(ofSize: 12)
-        replyLabel.textColor = Theme.secondaryText
+        replyLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        replyLabel.textColor = Theme.currentSecondaryText
 
-        viewIcon.image = UIImage(systemName: "eye")
-        viewIcon.tintColor = Theme.secondaryText
+        viewIcon.image = UIImage(systemName: "eye.fill")
+        viewIcon.tintColor = Theme.currentSecondaryText
         viewIcon.contentMode = .scaleAspectFit
 
-        viewLabel.font = .systemFont(ofSize: 12)
-        viewLabel.textColor = Theme.secondaryText
+        viewLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        viewLabel.textColor = Theme.currentSecondaryText
 
-        // Last post
-        lastPostLabel.font = .systemFont(ofSize: 11)
-        lastPostLabel.textColor = Theme.secondaryText
+        // Last post with subtle styling
+        lastPostLabel.font = .systemFont(ofSize: 12)
+        lastPostLabel.textColor = Theme.currentSecondaryText
 
-        // Tag (hidden by default)
-        tagView.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.15)
-        tagView.layer.cornerRadius = 4
+        // Tag with vibrant hot color
+        tagView.backgroundColor = Theme.hot.withAlphaComponent(0.15)
+        tagView.layer.cornerRadius = 6
         tagView.isHidden = true
 
-        tagLabel.font = .systemFont(ofSize: 10, weight: .medium)
-        tagLabel.textColor = .systemOrange
+        tagLabel.font = .systemFont(ofSize: 11, weight: .bold)
+        tagLabel.textColor = Theme.hot
+
+        // Observe theme changes
+        NotificationCenter.default.addObserver(self, selector: #selector(themeDidChange), name: .themeDidChange, object: nil)
 
         contentView.addSubview(containerView)
         containerView.addSubview(avatarImageView)
@@ -120,64 +143,64 @@ class ThreadCell: UITableViewCell {
         tagLabel.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
-            containerView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
+            containerView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
             containerView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             containerView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            containerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
+            containerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
 
-            // Avatar on the left
-            avatarImageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 14),
-            avatarImageView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 14),
-            avatarImageView.widthAnchor.constraint(equalToConstant: 40),
-            avatarImageView.heightAnchor.constraint(equalToConstant: 40),
+            // Avatar on the left - larger for visual impact
+            avatarImageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
+            avatarImageView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 16),
+            avatarImageView.widthAnchor.constraint(equalToConstant: 44),
+            avatarImageView.heightAnchor.constraint(equalToConstant: 44),
 
             // Title in the middle (to the right of avatar)
-            titleLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 14),
-            titleLabel.leadingAnchor.constraint(equalTo: avatarImageView.trailingAnchor, constant: 12),
-            titleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -14),
+            titleLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 16),
+            titleLabel.leadingAnchor.constraint(equalTo: avatarImageView.trailingAnchor, constant: 14),
+            titleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
 
             // Author badge below title
             authorBadge.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
             authorBadge.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
 
-            authorLabel.topAnchor.constraint(equalTo: authorBadge.topAnchor, constant: 4),
-            authorLabel.leadingAnchor.constraint(equalTo: authorBadge.leadingAnchor, constant: 8),
-            authorLabel.trailingAnchor.constraint(equalTo: authorBadge.trailingAnchor, constant: -8),
-            authorLabel.bottomAnchor.constraint(equalTo: authorBadge.bottomAnchor, constant: -4),
+            authorLabel.topAnchor.constraint(equalTo: authorBadge.topAnchor, constant: 5),
+            authorLabel.leadingAnchor.constraint(equalTo: authorBadge.leadingAnchor, constant: 10),
+            authorLabel.trailingAnchor.constraint(equalTo: authorBadge.trailingAnchor, constant: -10),
+            authorLabel.bottomAnchor.constraint(equalTo: authorBadge.bottomAnchor, constant: -5),
 
             // Stats container
-            statsContainer.topAnchor.constraint(equalTo: authorBadge.topAnchor),
-            statsContainer.leadingAnchor.constraint(equalTo: authorBadge.trailingAnchor, constant: 10),
-            statsContainer.heightAnchor.constraint(equalToConstant: 24),
+            statsContainer.centerYAnchor.constraint(equalTo: authorBadge.centerYAnchor),
+            statsContainer.leadingAnchor.constraint(equalTo: authorBadge.trailingAnchor, constant: 12),
+            statsContainer.heightAnchor.constraint(equalToConstant: 28),
 
-            replyIcon.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor, constant: 8),
+            replyIcon.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor, constant: 10),
             replyIcon.centerYAnchor.constraint(equalTo: statsContainer.centerYAnchor),
-            replyIcon.widthAnchor.constraint(equalToConstant: 14),
-            replyIcon.heightAnchor.constraint(equalToConstant: 14),
+            replyIcon.widthAnchor.constraint(equalToConstant: 16),
+            replyIcon.heightAnchor.constraint(equalToConstant: 16),
 
-            replyLabel.leadingAnchor.constraint(equalTo: replyIcon.trailingAnchor, constant: 4),
+            replyLabel.leadingAnchor.constraint(equalTo: replyIcon.trailingAnchor, constant: 5),
             replyLabel.centerYAnchor.constraint(equalTo: statsContainer.centerYAnchor),
 
-            viewIcon.leadingAnchor.constraint(equalTo: replyLabel.trailingAnchor, constant: 12),
+            viewIcon.leadingAnchor.constraint(equalTo: replyLabel.trailingAnchor, constant: 14),
             viewIcon.centerYAnchor.constraint(equalTo: statsContainer.centerYAnchor),
-            viewIcon.widthAnchor.constraint(equalToConstant: 14),
-            viewIcon.heightAnchor.constraint(equalToConstant: 14),
+            viewIcon.widthAnchor.constraint(equalToConstant: 16),
+            viewIcon.heightAnchor.constraint(equalToConstant: 16),
 
-            viewLabel.leadingAnchor.constraint(equalTo: viewIcon.trailingAnchor, constant: 4),
+            viewLabel.leadingAnchor.constraint(equalTo: viewIcon.trailingAnchor, constant: 5),
             viewLabel.centerYAnchor.constraint(equalTo: statsContainer.centerYAnchor),
-            viewLabel.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -8),
+            viewLabel.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor, constant: -10),
 
-            lastPostLabel.topAnchor.constraint(equalTo: authorBadge.bottomAnchor, constant: 8),
+            lastPostLabel.topAnchor.constraint(equalTo: authorBadge.bottomAnchor, constant: 10),
             lastPostLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            lastPostLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -14),
+            lastPostLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -16),
 
-            tagView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -14),
+            tagView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
             tagView.centerYAnchor.constraint(equalTo: lastPostLabel.centerYAnchor),
 
-            tagLabel.topAnchor.constraint(equalTo: tagView.topAnchor, constant: 2),
-            tagLabel.leadingAnchor.constraint(equalTo: tagView.leadingAnchor, constant: 6),
-            tagLabel.trailingAnchor.constraint(equalTo: tagView.trailingAnchor, constant: -6),
-            tagLabel.bottomAnchor.constraint(equalTo: tagView.bottomAnchor, constant: -2)
+            tagLabel.topAnchor.constraint(equalTo: tagView.topAnchor, constant: 4),
+            tagLabel.leadingAnchor.constraint(equalTo: tagView.leadingAnchor, constant: 8),
+            tagLabel.trailingAnchor.constraint(equalTo: tagView.trailingAnchor, constant: -8),
+            tagLabel.bottomAnchor.constraint(equalTo: tagView.bottomAnchor, constant: -4)
         ])
     }
 
@@ -196,9 +219,9 @@ class ThreadCell: UITableViewCell {
 
         // Gray out title if thread has been read
         if ReadTracker.shared.isRead(tid: thread.tid) {
-            titleLabel.textColor = Theme.secondaryText
+            titleLabel.textColor = Theme.currentSecondaryText
         } else {
-            titleLabel.textColor = Theme.titleText
+            titleLabel.textColor = Theme.currentForeground
         }
 
         // Highlight hot threads
@@ -234,9 +257,36 @@ class ThreadCell: UITableViewCell {
         avatarImageView.image = UIImage(systemName: "person.circle.fill")
     }
 
+    @objc private func themeDidChange() {
+        backgroundColor = Theme.currentBackground
+        containerView.backgroundColor = Theme.currentCard
+        containerView.layer.borderColor = Theme.currentBorder.cgColor
+        avatarImageView.backgroundColor = Theme.currentMuted
+        avatarImageView.tintColor = Theme.currentSecondaryText
+        titleLabel.textColor = Theme.currentForeground
+        statsContainer.backgroundColor = Theme.currentSecondary
+        replyLabel.textColor = Theme.currentSecondaryText
+        viewIcon.tintColor = Theme.currentSecondaryText
+        viewLabel.textColor = Theme.currentSecondaryText
+        lastPostLabel.textColor = Theme.currentSecondaryText
+    }
+
     override func setHighlighted(_ highlighted: Bool, animated: Bool) {
-        UIView.animate(withDuration: 0.15) {
-            self.containerView.transform = highlighted ? CGAffineTransform(scaleX: 0.98, y: 0.98) : .identity
+        let transform: CGAffineTransform = highlighted ? CGAffineTransform(scaleX: 0.97, y: 0.97) : .identity
+        let opacity: Float = highlighted ? 0.8 : 1.0
+
+        if animated {
+            UIView.animate(withDuration: Theme.fastAnimation, delay: 0, options: [.curveEaseOut]) {
+                self.containerView.transform = transform
+                self.containerView.layer.shadowOpacity = opacity
+            }
+        } else {
+            containerView.transform = transform
+            containerView.layer.shadowOpacity = opacity
         }
+    }
+
+    override func setSelected(_ selected: Bool, animated: Bool) {
+        setHighlighted(selected, animated: animated)
     }
 }

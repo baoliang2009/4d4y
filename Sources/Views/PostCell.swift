@@ -53,12 +53,12 @@ class PostCell: UITableViewCell {
 
     private func setupUI() {
         selectionStyle = .none
-        backgroundColor = Theme.background
+        backgroundColor = Theme.currentBackground
 
         // Container card with elevated effect
-        containerView.backgroundColor = Theme.card
+        containerView.backgroundColor = Theme.currentCard
         containerView.layer.cornerRadius = Theme.largeRadius
-        containerView.layer.borderColor = Theme.border.cgColor
+        containerView.layer.borderColor = Theme.currentBorder.cgColor
         containerView.layer.borderWidth = 1
 
         // Subtle shadow for depth
@@ -69,18 +69,18 @@ class PostCell: UITableViewCell {
         containerView.layer.masksToBounds = false
 
         // Avatar with gradient ring
-        avatarView.backgroundColor = Theme.muted
+        avatarView.backgroundColor = Theme.currentMuted
         avatarView.contentMode = .scaleAspectFill
         avatarView.layer.cornerRadius = 18
         avatarView.layer.masksToBounds = true
         avatarView.layer.borderColor = Theme.primary.cgColor
         avatarView.layer.borderWidth = 2.5
         avatarView.image = UIImage(systemName: "person.circle.fill")
-        avatarView.tintColor = Theme.secondaryText
+        avatarView.tintColor = Theme.currentSecondaryText
 
         // Author name with weight
         authorNameLabel.font = .systemFont(ofSize: 16, weight: .semibold)
-        authorNameLabel.textColor = Theme.titleText
+        authorNameLabel.textColor = Theme.currentForeground
 
         // Pinned badge with gradient
         pinnedBadge.backgroundColor = Theme.primary.withAlphaComponent(0.15)
@@ -96,7 +96,7 @@ class PostCell: UITableViewCell {
 
         // Date with subtle styling
         dateLabel.font = .systemFont(ofSize: 13)
-        dateLabel.textColor = Theme.secondaryText
+        dateLabel.textColor = Theme.currentSecondaryText
 
         // Floor label with accent
         floorLabel.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -105,16 +105,16 @@ class PostCell: UITableViewCell {
 
         // Title with emphasis
         titleLabel.font = .systemFont(ofSize: 18, weight: .bold)
-        titleLabel.textColor = Theme.titleText
+        titleLabel.textColor = Theme.currentForeground
         titleLabel.numberOfLines = 2
 
         // Content preview
         contentLabel.font = .systemFont(ofSize: 15, weight: .regular)
-        contentLabel.textColor = Theme.bodyText
+        contentLabel.textColor = Theme.currentForeground
         contentLabel.numberOfLines = 0
 
         // Stats container with glass effect
-        statsContainer.backgroundColor = Theme.secondary
+        statsContainer.backgroundColor = Theme.currentSecondary
         statsContainer.layer.cornerRadius = 10
 
         replyIcon.image = UIImage(systemName: "message.fill")
@@ -122,7 +122,7 @@ class PostCell: UITableViewCell {
         replyIcon.contentMode = .scaleAspectFit
 
         replyLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        replyLabel.textColor = Theme.secondaryText
+        replyLabel.textColor = Theme.currentSecondaryText
 
         replyCountView.axis = .horizontal
         replyCountView.spacing = 5
@@ -130,11 +130,11 @@ class PostCell: UITableViewCell {
         replyCountView.addArrangedSubview(replyLabel)
 
         viewIcon.image = UIImage(systemName: "eye.fill")
-        viewIcon.tintColor = Theme.secondaryText
+        viewIcon.tintColor = Theme.currentSecondaryText
         viewIcon.contentMode = .scaleAspectFit
 
         viewLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        viewLabel.textColor = Theme.secondaryText
+        viewLabel.textColor = Theme.currentSecondaryText
 
         viewCountView.axis = .horizontal
         viewCountView.spacing = 5
@@ -150,6 +150,9 @@ class PostCell: UITableViewCell {
         replyButton.contentEdgeInsets = UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
         replyButton.addTarget(self, action: #selector(replyTapped), for: .touchUpInside)
         replyButton.translatesAutoresizingMaskIntoConstraints = false
+
+        // Observe theme changes
+        NotificationCenter.default.addObserver(self, selector: #selector(themeDidChange), name: .themeDidChange, object: nil)
 
         // Images container and stack view
         imagesStackView.axis = .vertical
@@ -399,6 +402,22 @@ class PostCell: UITableViewCell {
         titleLabel.isHidden = false
     }
 
+    @objc private func themeDidChange() {
+        backgroundColor = Theme.currentBackground
+        containerView.backgroundColor = Theme.currentCard
+        containerView.layer.borderColor = Theme.currentBorder.cgColor
+        avatarView.backgroundColor = Theme.currentMuted
+        avatarView.tintColor = Theme.currentSecondaryText
+        authorNameLabel.textColor = Theme.currentForeground
+        dateLabel.textColor = Theme.currentSecondaryText
+        titleLabel.textColor = Theme.currentForeground
+        contentLabel.textColor = Theme.currentForeground
+        statsContainer.backgroundColor = Theme.currentSecondary
+        replyLabel.textColor = Theme.currentSecondaryText
+        viewIcon.tintColor = Theme.currentSecondaryText
+        viewLabel.textColor = Theme.currentSecondaryText
+    }
+
     func configure(with thread: ForumThread) {
         authorNameLabel.text = thread.author
         dateLabel.text = thread.lastPostDate
@@ -442,7 +461,7 @@ class PostCell: UITableViewCell {
         for (index, imageURL) in filtered.prefix(3).enumerated() {
             let imageView = UIImageView()
             imageView.contentMode = .scaleAspectFill
-            imageView.backgroundColor = Theme.muted
+            imageView.backgroundColor = Theme.currentMuted
             imageView.layer.cornerRadius = 8
             imageView.clipsToBounds = true
             imageView.isUserInteractionEnabled = true
@@ -460,7 +479,7 @@ class PostCell: UITableViewCell {
             imageView.loadForumImage(from: imageURL, placeholder: nil) { [weak imageView] image, error in
                 if error != nil {
                     // Show placeholder on error
-                    imageView?.backgroundColor = Theme.muted
+                    imageView?.backgroundColor = Theme.currentMuted
                 }
             }
 

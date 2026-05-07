@@ -35,7 +35,7 @@ class PMDetailViewController: UIViewController {
 
     private func setupUI() {
         title = "与 \(username) 的对话"
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
 
         setupReplyBar()
         setupTableView()
@@ -43,16 +43,16 @@ class PMDetailViewController: UIViewController {
     }
 
     private func setupReplyBar() {
-        replyBar.backgroundColor = Theme.card
-        replyBar.layer.borderColor = Theme.border.cgColor
+        replyBar.backgroundColor = Theme.currentCard
+        replyBar.layer.borderColor = Theme.currentBorder.cgColor
         replyBar.layer.borderWidth = 0.5
         view.addSubview(replyBar)
 
-        replyTextView.backgroundColor = Theme.background
-        replyTextView.textColor = Theme.foreground
+        replyTextView.backgroundColor = Theme.currentBackground
+        replyTextView.textColor = Theme.currentForeground
         replyTextView.font = .systemFont(ofSize: 15)
         replyTextView.layer.cornerRadius = 8
-        replyTextView.layer.borderColor = Theme.border.cgColor
+        replyTextView.layer.borderColor = Theme.currentBorder.cgColor
         replyTextView.layer.borderWidth = 0.5
         replyTextView.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
         replyTextView.isScrollEnabled = false
@@ -240,6 +240,20 @@ class PMDetailViewController: UIViewController {
             }
             textarea.value = '\(escapedMessage)';
 
+            // Set formhash if present
+            var formhashInput = document.querySelector('input[name="formhash"]');
+            if (formhashInput) {
+                formhashInput.value = '\(formhash)';
+                console.log('[PM] Set formhash:', formhashInput.value);
+            }
+
+            // Ensure pmsubmit is checked (some forms require this)
+            var pmsubmit = document.querySelector('input[name="pmsubmit"]');
+            if (pmsubmit && !pmsubmit.checked) {
+                pmsubmit.checked = true;
+                console.log('[PM] Checked pmsubmit');
+            }
+
             var form = document.querySelector('#pmform') || document.querySelector('form');
             if (form) {
                 form.submit();
@@ -364,19 +378,19 @@ class PMMessageCell: UITableViewCell {
         bubbleView.layer.cornerRadius = 12
         contentView.addSubview(bubbleView)
 
-        avatarImageView.backgroundColor = Theme.muted
+        avatarImageView.backgroundColor = Theme.currentMuted
         avatarImageView.contentMode = .scaleAspectFill
         avatarImageView.layer.cornerRadius = 18
         avatarImageView.clipsToBounds = true
-        avatarImageView.tintColor = Theme.secondaryText
+        avatarImageView.tintColor = Theme.currentSecondaryText
         bubbleView.addSubview(avatarImageView)
 
         authorLabel.font = .systemFont(ofSize: 11)
-        authorLabel.textColor = Theme.secondaryText
+        authorLabel.textColor = Theme.currentSecondaryText
         bubbleView.addSubview(authorLabel)
 
         dateLabel.font = .systemFont(ofSize: 11)
-        dateLabel.textColor = Theme.secondaryText
+        dateLabel.textColor = Theme.currentSecondaryText
         dateLabel.textAlignment = .right
         bubbleView.addSubview(dateLabel)
 
@@ -470,10 +484,10 @@ class PMMessageCell: UITableViewCell {
     private func updateBubbleAppearance(isSelf: Bool) {
         if isSelf {
             bubbleView.backgroundColor = Theme.primary.withAlphaComponent(0.2)
-            contentLabel.textColor = Theme.foreground
+            contentLabel.textColor = Theme.currentForeground
         } else {
-            bubbleView.backgroundColor = Theme.card
-            contentLabel.textColor = Theme.foreground
+            bubbleView.backgroundColor = Theme.currentCard
+            contentLabel.textColor = Theme.currentForeground
         }
     }
 }

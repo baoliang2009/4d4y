@@ -67,7 +67,7 @@ class LoginViewController: UIViewController {
 
     private func setupUI() {
         title = "登录"
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
 
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel,
@@ -107,16 +107,16 @@ class LoginViewController: UIViewController {
         loadingOverlay.backgroundColor = UIColor.black.withAlphaComponent(0.6)
         loadingOverlay.isHidden = true
 
-        loadingContainer.backgroundColor = Theme.card
+        loadingContainer.backgroundColor = Theme.currentCard
         loadingContainer.layer.cornerRadius = 16
-        loadingContainer.layer.borderColor = Theme.border.cgColor
+        loadingContainer.layer.borderColor = Theme.currentBorder.cgColor
         loadingContainer.layer.borderWidth = 1
 
         loadingSpinner.color = Theme.primary
 
         loadingLabel.text = "正在连接服务器..."
         loadingLabel.font = .systemFont(ofSize: 16, weight: .medium)
-        loadingLabel.textColor = Theme.foreground
+        loadingLabel.textColor = Theme.currentForeground
         loadingLabel.textAlignment = .center
         loadingLabel.numberOfLines = 0
 
@@ -181,14 +181,14 @@ class LoginViewController: UIViewController {
         let label = UILabel()
         label.text = "用户名"
         label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = Theme.secondaryText
+        label.textColor = Theme.currentSecondaryText
 
         usernameTextField.borderStyle = .roundedRect
         usernameTextField.autocapitalizationType = .none
         usernameTextField.autocorrectionType = .no
         usernameTextField.placeholder = "输入用户名"
-        usernameTextField.backgroundColor = Theme.muted
-        usernameTextField.textColor = Theme.foreground
+        usernameTextField.backgroundColor = Theme.currentMuted
+        usernameTextField.textColor = Theme.currentForeground
 
         contentView.addSubview(label)
         contentView.addSubview(usernameTextField)
@@ -212,13 +212,13 @@ class LoginViewController: UIViewController {
         let label = UILabel()
         label.text = "密码"
         label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = Theme.secondaryText
+        label.textColor = Theme.currentSecondaryText
 
         passwordTextField.borderStyle = .roundedRect
         passwordTextField.isSecureTextEntry = true
         passwordTextField.placeholder = "输入密码"
-        passwordTextField.backgroundColor = Theme.muted
-        passwordTextField.textColor = Theme.foreground
+        passwordTextField.backgroundColor = Theme.currentMuted
+        passwordTextField.textColor = Theme.currentForeground
 
         contentView.addSubview(label)
         contentView.addSubview(passwordTextField)
@@ -242,14 +242,14 @@ class LoginViewController: UIViewController {
         let label = UILabel()
         label.text = "安全问题"
         label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = Theme.secondaryText
+        label.textColor = Theme.currentSecondaryText
 
         questionButton.setTitle(loginQuestions[0].question, for: .normal)
         questionButton.contentHorizontalAlignment = .left
         questionButton.titleLabel?.font = .systemFont(ofSize: 16)
-        questionButton.tintColor = Theme.foreground
+        questionButton.tintColor = Theme.currentForeground
         questionButton.layer.borderWidth = 1
-        questionButton.layer.borderColor = Theme.border.cgColor
+        questionButton.layer.borderColor = Theme.currentBorder.cgColor
         questionButton.layer.cornerRadius = 5
         questionButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
         questionButton.addTarget(self, action: #selector(selectQuestion), for: .touchUpInside)
@@ -276,14 +276,14 @@ class LoginViewController: UIViewController {
         let label = UILabel()
         label.text = "安全问题答案"
         label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = Theme.secondaryText
+        label.textColor = Theme.currentSecondaryText
 
         answerTextField.borderStyle = .roundedRect
         answerTextField.placeholder = "输入答案"
         answerTextField.autocapitalizationType = .none
         answerTextField.autocorrectionType = .no
-        answerTextField.backgroundColor = Theme.muted
-        answerTextField.textColor = Theme.foreground
+        answerTextField.backgroundColor = Theme.currentMuted
+        answerTextField.textColor = Theme.currentForeground
 
         contentView.addSubview(label)
         contentView.addSubview(answerTextField)
@@ -307,7 +307,7 @@ class LoginViewController: UIViewController {
         let label = UILabel()
         label.text = "记住登录"
         label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = Theme.secondaryText
+        label.textColor = Theme.currentSecondaryText
 
         rememberMeSwitch.isOn = true
         rememberMeSwitch.onTintColor = Theme.primary
@@ -703,19 +703,26 @@ extension LoginViewController: WKNavigationDelegate {
         }
 
         // Check if this is the forum index page (being loaded after login success)
-        if urlString.contains("forum/index.php") {
-            print("[Login] Detected forum index page, syncing cookies...")
+        // Handle both forum/index.php and forum/ (base URL after redirect)
+        if urlString.contains("forum/index.php") || (urlString.contains("4d4y.com/forum/") && !urlString.contains("logging.php") && !urlString.contains("post.php")) {
+            print("[Login] Detected forum page after login, syncing cookies...")
+            print("[Login] URL: \(urlString)")
             updateLoadingMessage("正在同步登录状态...")
             // Sync cookies before extracting forum list or completing login
             syncCookiesToSharedStorage(from: webView) { [weak self] hasCookies in
                 guard let self = self else { return }
                 print("[Login] Cookie sync result: hasCookies=\(hasCookies)")
-                if self.forumListCompletion != nil {
-                    self.extractForumListHTML(from: webView)
+
+                if hasCookies {
+                    // Now proceed to memcp.php to get UID
+                    print("[Login] Proceeding to memcp.php to get UID...")
+                    self.updateLoadingMessage("正在获取用户信息...")
+                    let memcpURL = URL(string: "https://www.4d4y.com/forum/memcp.php")!
+                    webView.load(URLRequest(url: memcpURL))
                 } else {
-                    // No forum list completion, just notify login success
-                    print("[Login] Login completed, notifying delegate")
-                    self.delegate?.loginViewControllerDidLogin(self)
+                    // No cookies, login might have failed
+                    print("[Login] No auth cookies, login may have failed")
+                    self.loginCompletion?(false, "登录失败，未获取到有效的会话")
                     self.cleanup()
                 }
             }
@@ -724,13 +731,20 @@ extension LoginViewController: WKNavigationDelegate {
 
         // Only check for logged in status on the login page itself
         if urlString.contains("logging.php") && !isLoggingIn {
+            print("[Login] On login page, checking status...")
+
             // First check if already logged in
             webView.evaluateJavaScript("document.body.innerText") { [weak self] result, error in
                 guard let self = self else { return }
 
+                if let error = error {
+                    print("[Login] Error getting body text: \(error.localizedDescription)")
+                }
+
                 if let text = result as? String {
-                    if text.contains("欢迎") || text.contains("vkeypm") || text.contains("个人中心") {
-                        print("[Login] User already logged in, syncing cookies...")
+                    print("[Login] Body text preview: \(String(text.prefix(100)))")
+                    if text.contains("欢迎") || text.contains("vkeypm") || text.contains("个人中心") || text.contains("登录") && text.contains("密码") {
+                        print("[Login] User already logged in or on login page, checking for form...")
                         self.handleLoginSuccess(webView: webView)
                         return
                     }
@@ -738,42 +752,82 @@ extension LoginViewController: WKNavigationDelegate {
 
                 // Not logged in, try to extract formhash
                 print("[Login] Not logged in, extracting formhash...")
-                webView.evaluateJavaScript("document.querySelector('input[name=formhash]')?.value") { [weak self] result, error in
+                self.extractFormhashAndLogin(webView: webView)
+            }
+        } else if urlString.contains("logging.php") && isLoggingIn {
+            print("[Login] On login page with isLoggingIn=true, checking if form exists...")
+            // Check if login form exists - if not, user is already logged in
+            webView.evaluateJavaScript("document.querySelector('form[name=login]') || document.querySelector('#loginform') ? 'has_form' : 'no_form'") { [weak self] result, _ in
+                guard let self = self else { return }
+
+                let hasForm = result as? String == "has_form"
+                print("[Login] Login form exists: \(hasForm)")
+
+                if hasForm {
+                    // Form exists, try to extract formhash
+                    self.extractFormhashAndLogin(webView: webView)
+                } else {
+                    // No form means user is already logged in
+                    print("[Login] No login form found, user is already logged in")
+                    self.isLoggingIn = false // Reset state
+                    self.handleLoginSuccess(webView: webView)
+                }
+            }
+        }
+    }
+
+    private func extractFormhashAndLogin(webView: WKWebView) {
+        // Try to extract formhash from the page
+        webView.evaluateJavaScript("document.querySelector('input[name=formhash]')?.value") { [weak self] result, error in
+            guard let self = self else { return }
+
+            if let error = error {
+                print("[Login] formhash JS error: \(error.localizedDescription)")
+            }
+
+            if let hash = result as? String, !hash.isEmpty {
+                print("[Login] Found formhash: \(hash)")
+                self.formhash = hash
+                self.isLoggingIn = true
+                self.performLogin()
+            } else {
+                // Try alternate methods
+                print("[Login] formhash not found via JS, trying HTML parsing...")
+                webView.evaluateJavaScript("document.body ? document.body.innerHTML.substring(0, 500) : 'no body'") { [weak self] htmlResult, _ in
                     guard let self = self else { return }
 
-                    if let hash = result as? String, !hash.isEmpty {
-                        print("[Login] Found formhash: \(hash)")
-                        self.formhash = hash
-                        self.isLoggingIn = true
-                        self.performLogin()
-                    } else {
-                        print("[Login] Could not find formhash in page")
-                        webView.evaluateJavaScript("document.body.innerHTML") { [weak self] htmlResult, _ in
-                            guard let html = htmlResult as? String else {
-                                self?.loginCompletion?(false, "无法获取登录表单")
-                                self?.cleanup()
+                    if let html = htmlResult as? String {
+                        print("[Login] HTML preview: \(html.prefix(200))")
+
+                        // Try to find formhash in HTML
+                        if let range = html.range(of: "formhash\" value=\"") {
+                            let startIndex = range.upperBound
+                            let endIndex = html.index(startIndex, offsetBy: 40, limitedBy: html.endIndex) ?? html.endIndex
+                            let substring = String(html[startIndex..<endIndex])
+                            if let hashEnd = substring.firstIndex(of: "\"") {
+                                let hash = String(substring[..<hashEnd])
+                                print("[Login] Extracted formhash from HTML: \(hash)")
+                                self.formhash = hash
+                                self.isLoggingIn = true
+                                self.performLogin()
                                 return
                             }
+                        }
 
-                            let searchString = "formhash\" value=\""
-                            if let range = html.range(of: searchString) {
-                                let startIndex = range.upperBound
-                                let endIndex = html.index(startIndex, offsetBy: 20, limitedBy: html.endIndex) ?? html.endIndex
-                                let substring = String(html[startIndex..<endIndex])
-                                if let hashEnd = substring.firstIndex(of: "\"") {
-                                    let hash = String(substring[..<hashEnd])
-                                    print("[Login] Extracted formhash: \(hash)")
-                                    self?.formhash = hash
-                                    self?.isLoggingIn = true
-                                    self?.performLogin()
-                                    return
-                                }
-                            }
-                            print("[Login] Failed to extract formhash")
-                            self?.loginCompletion?(false, "无法获取登录表单")
-                            self?.cleanup()
+                        // Check for Cloudflare or other challenges
+                        if html.contains("cloudflare") || html.contains("challenge") || html.contains("Turnstile") {
+                            print("[Login] Cloudflare challenge detected!")
+                            self.updateLoadingMessage("正在通过安全验证...")
                         }
                     }
+
+                    print("[Login] Failed to extract formhash, checking page state...")
+                    webView.evaluateJavaScript("document.readyState + ' | ' + (document.querySelector('input[name=formhash]') ? 'has_formhash' : 'no_formhash')") { [weak self] stateResult, _ in
+                        print("[Login] Page state: \(stateResult ?? "unknown")")
+                    }
+
+                    self.loginCompletion?(false, "无法获取登录表单，请检查网络后重试")
+                    self.cleanup()
                 }
             }
         }
@@ -841,50 +895,121 @@ extension LoginViewController: WKNavigationDelegate {
                 print("[Login] memcp.php body HTML length: \(bodyHtml.count)")
             }
 
+            // Extract both UID and username from the page
             let js = #"""
             (function() {
+                var result = {uid: null, username: null};
+
+                // Extract UID
                 var umenu = document.getElementById('umenu');
-                if (!umenu) {
+                if (umenu) {
+                    var links = umenu.querySelectorAll('a[href*="space.php?uid="]');
+                    for (var i = 0; i < links.length; i++) {
+                        var href = links[i].getAttribute('href');
+                        var match = href.match(/uid=(\d+)/);
+                        if (match && match[1]) {
+                            result.uid = match[1];
+                            // Also get username from link text
+                            var linkText = links[i].textContent.trim();
+                            if (linkText && linkText.length > 0 && linkText.length < 50) {
+                                result.username = linkText;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                // If no username from umenu, try other links
+                if (!result.username) {
                     var allLinks = document.querySelectorAll('a[href*="uid="]');
                     for (var i = 0; i < allLinks.length; i++) {
                         var href = allLinks[i].getAttribute('href');
                         var match = href.match(/uid=(\d+)/);
                         if (match && match[1]) {
-                            return match[1];
+                            result.uid = match[1];
+                            var linkText = allLinks[i].textContent.trim();
+                            if (linkText && linkText.length > 0 && linkText.length < 50 && !linkText.includes(' ')) {
+                                result.username = linkText;
+                                break;
+                            }
                         }
                     }
-                    return null;
                 }
 
-                var links = umenu.querySelectorAll('a[href*="space.php?uid="]');
-                for (var i = 0; i < links.length; i++) {
-                    var href = links[i].getAttribute('href');
-                    var match = href.match(/uid=(\d+)/);
-                    if (match && match[1]) {
-                        return match[1];
+                // Try to get username from page title or header
+                var headerUsername = document.querySelector('.headerusername') ||
+                                   document.querySelector('.loginnames') ||
+                                   document.querySelector('#umenu .fl');
+                if (headerUsername && !result.username) {
+                    var text = headerUsername.textContent.trim();
+                    // Remove "欢迎 " prefix if present
+                    if (text.indexOf(' ') > 0) {
+                        text = text.substring(text.indexOf(' ') + 1);
+                    }
+                    if (text.length > 0 && text.length < 50) {
+                        result.username = text;
                     }
                 }
-                return null;
+
+                return JSON.stringify(result);
             })();
             """#
 
             webView.evaluateJavaScript(js) { [weak self] result, error in
                 guard let self = self else { return }
 
-                print("[Login] UID extraction result: \(result ?? "nil")")
+                print("[Login] UID/Username extraction result: \(result ?? "nil")")
 
-                if let uidStr = result as? String, let uid = Int(uidStr) {
+                // Parse result
+                var uid: Int?
+                var username: String?
+
+                if let jsonStr = result as? String,
+                   let data = jsonStr.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    if let uidStr = json["uid"] as? String {
+                        uid = Int(uidStr)
+                    }
+                    username = json["username"] as? String
+                }
+
+                // Save UID
+                if let uid = uid {
                     print("[Login] Extracted UID: \(uid)")
                     LoginManager.shared.uid = uid
-                    self.proceedToForumPage(webView: webView)
-                } else {
-                    print("[Login] Failed to extract UID, proceeding anyway")
-                    self.proceedToForumPage(webView: webView)
                 }
+
+                // Save username if found
+                if let username = username, !username.isEmpty {
+                    print("[Login] Extracted username: \(username)")
+                    LoginManager.shared.username = username
+                } else {
+                    // Use stored credentials if available, otherwise use UID as fallback
+                    let storedUsername = UserDefaults.standard.string(forKey: "forum_username")
+                    if storedUsername == nil {
+                        print("[Login] No username found, using UID as fallback")
+                        LoginManager.shared.username = "User_\(uid ?? 0)"
+                    }
+                }
+
+                // Complete login - UID extracted and cookies are synced
+                print("[Login] Login completed successfully, notifying delegate...")
+                self.updateLoadingMessage("登录成功!")
+
+                // Set logged in state AND save login date so refreshLoginState doesn't clear it
+                LoginManager.shared.loginDate = Date()
+                LoginManager.shared.isLoggedIn = true
+
+                // Notify delegate
+                self.delegate?.loginViewControllerDidLogin(self)
+
+                // Cleanup
+                self.cleanup()
             }
         }
     }
 
+    // Keep this for backwards compatibility but it's no longer used in the main flow
     private func proceedToForumPage(webView: WKWebView) {
         print("[Login] Proceeding to forum page...")
         self.forumListCompletion = { _ in }

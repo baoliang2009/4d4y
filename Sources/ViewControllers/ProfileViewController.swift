@@ -44,7 +44,7 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
 
     private func setupUI() {
         title = "我的"
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
 
         view.addSubview(scrollView)
         scrollView.addSubview(contentView)
@@ -77,30 +77,30 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
 
     private func setupProfileHeader() {
         // Avatar
-        avatarImageView.backgroundColor = Theme.muted
+        avatarImageView.backgroundColor = Theme.currentMuted
         avatarImageView.contentMode = .scaleAspectFill
         avatarImageView.layer.cornerRadius = 40
         avatarImageView.clipsToBounds = true
         avatarImageView.image = UIImage(systemName: "person.circle.fill")
-        avatarImageView.tintColor = Theme.secondaryText
+        avatarImageView.tintColor = Theme.currentSecondaryText
         contentView.addSubview(avatarImageView)
 
         // Username
         usernameLabel.font = .systemFont(ofSize: 20, weight: .semibold)
-        usernameLabel.textColor = Theme.titleText
+        usernameLabel.textColor = Theme.currentForeground
         usernameLabel.textAlignment = .center
         usernameLabel.text = "未登录"
         contentView.addSubview(usernameLabel)
 
         // UID
         uidLabel.font = .systemFont(ofSize: 14)
-        uidLabel.textColor = Theme.secondaryText
+        uidLabel.textColor = Theme.currentSecondaryText
         uidLabel.textAlignment = .center
         uidLabel.text = ""
         contentView.addSubview(uidLabel)
 
         // Online status
-        onlineStatusView.backgroundColor = Theme.muted
+        onlineStatusView.backgroundColor = Theme.currentMuted
         onlineStatusView.layer.cornerRadius = 4
         contentView.addSubview(onlineStatusView)
 
@@ -140,16 +140,16 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
     }
 
     private func setupStatsSection() {
-        statsContainer.backgroundColor = Theme.card
+        statsContainer.backgroundColor = Theme.currentCard
         statsContainer.layer.cornerRadius = 12
-        statsContainer.layer.borderColor = Theme.border.cgColor
+        statsContainer.layer.borderColor = Theme.currentBorder.cgColor
         statsContainer.layer.borderWidth = 1
         contentView.addSubview(statsContainer)
 
         let threadsTitleLabel = UILabel()
         threadsTitleLabel.text = "主题"
         threadsTitleLabel.font = .systemFont(ofSize: 12)
-        threadsTitleLabel.textColor = Theme.secondaryText
+        threadsTitleLabel.textColor = Theme.currentSecondaryText
         threadsTitleLabel.textAlignment = .center
 
         threadsCountLabel.text = "0"
@@ -160,7 +160,7 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
         let postsTitleLabel = UILabel()
         postsTitleLabel.text = "回复"
         postsTitleLabel.font = .systemFont(ofSize: 12)
-        postsTitleLabel.textColor = Theme.secondaryText
+        postsTitleLabel.textColor = Theme.currentSecondaryText
         postsTitleLabel.textAlignment = .center
 
         postsCountLabel.text = "0"
@@ -171,7 +171,7 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
         let creditsTitleLabel = UILabel()
         creditsTitleLabel.text = "积分"
         creditsTitleLabel.font = .systemFont(ofSize: 12)
-        creditsTitleLabel.textColor = Theme.secondaryText
+        creditsTitleLabel.textColor = Theme.currentSecondaryText
         creditsTitleLabel.textAlignment = .center
 
         creditsCountLabel.text = "0"
@@ -195,10 +195,10 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
         creditsStack.alignment = .center
 
         let divider1 = UIView()
-        divider1.backgroundColor = Theme.border
+        divider1.backgroundColor = Theme.currentBorder
 
         let divider2 = UIView()
-        divider2.backgroundColor = Theme.border
+        divider2.backgroundColor = Theme.currentBorder
 
         statsContainer.addSubview(threadsStack)
         statsContainer.addSubview(divider1)
@@ -241,9 +241,9 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
     }
 
     private func setupInfoCard() {
-        infoCard.backgroundColor = Theme.card
+        infoCard.backgroundColor = Theme.currentCard
         infoCard.layer.cornerRadius = 12
-        infoCard.layer.borderColor = Theme.border.cgColor
+        infoCard.layer.borderColor = Theme.currentBorder.cgColor
         infoCard.layer.borderWidth = 1
         contentView.addSubview(infoCard)
 
@@ -335,13 +335,13 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
         let titleLabel = UILabel()
         titleLabel.text = title
         titleLabel.font = .systemFont(ofSize: 14)
-        titleLabel.textColor = Theme.secondaryText
+        titleLabel.textColor = Theme.currentSecondaryText
         container.addSubview(titleLabel)
 
         let valueLabel = UILabel()
         valueLabel.text = value
         valueLabel.font = .systemFont(ofSize: 14)
-        valueLabel.textColor = Theme.titleText
+        valueLabel.textColor = Theme.currentForeground
         valueLabel.textAlignment = .right
         valueLabel.numberOfLines = 0
         container.addSubview(valueLabel)
@@ -373,7 +373,7 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
     private func setupMenuSection() {
         menuStackView.axis = .vertical
         menuStackView.spacing = 1
-        menuStackView.backgroundColor = Theme.border
+        menuStackView.backgroundColor = Theme.currentBorder
         menuStackView.layer.cornerRadius = 12
         menuStackView.clipsToBounds = true
         contentView.addSubview(menuStackView)
@@ -400,7 +400,7 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
 
     private func createMenuItem(icon: String, title: String) -> UIView {
         let container = UIView()
-        container.backgroundColor = Theme.card
+        container.backgroundColor = Theme.currentCard
 
         let iconView = UIImageView(image: UIImage(systemName: icon))
         iconView.tintColor = Theme.primary
@@ -410,11 +410,11 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
         let titleLabel = UILabel()
         titleLabel.text = title
         titleLabel.font = .systemFont(ofSize: 16)
-        titleLabel.textColor = Theme.titleText
+        titleLabel.textColor = Theme.currentForeground
         container.addSubview(titleLabel)
 
         let arrow = UIImageView(image: UIImage(systemName: "chevron.right"))
-        arrow.tintColor = Theme.secondaryText
+        arrow.tintColor = Theme.currentSecondaryText
         arrow.contentMode = .scaleAspectFit
         container.addSubview(arrow)
 
@@ -476,7 +476,7 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
     private func updateUIForLoggedOut() {
         usernameLabel.text = "未登录"
         uidLabel.text = ""
-        onlineStatusView.backgroundColor = Theme.muted
+        onlineStatusView.backgroundColor = Theme.currentMuted
         onlineStatusLabel.text = "离线"
         postsCountLabel.text = "0"
         creditsCountLabel.text = "0"
@@ -497,10 +497,10 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
     private func updateUIForLoggedIn(username: String, uid: Int) {
         usernameLabel.text = username
         uidLabel.text = "UID: \(uid)"
-        onlineStatusView.backgroundColor = Theme.muted
+        onlineStatusView.backgroundColor = Theme.currentMuted
         onlineStatusLabel.text = "加载中..."
         loginButton.setTitle("已登录", for: .normal)
-        loginButton.backgroundColor = Theme.muted
+        loginButton.backgroundColor = Theme.currentMuted
         loginButton.isEnabled = false
         logoutButton.isHidden = false
     }
@@ -820,7 +820,7 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
             onlineStatusView.backgroundColor = UIColor.systemGreen
             onlineStatusLabel.text = "在线"
         } else {
-            onlineStatusView.backgroundColor = Theme.muted
+            onlineStatusView.backgroundColor = Theme.currentMuted
             onlineStatusLabel.text = "离线"
         }
 
@@ -858,15 +858,20 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
     func loginViewControllerDidLogin(_ controller: LoginViewController) {
         print("[Profile] Login completed, refreshing data...")
         loadUserData()
+        // Dismiss the login view controller
+        controller.dismiss(animated: true)
     }
 
     func loginViewControllerDidLoginWithForumData(_ controller: LoginViewController, forums: [Forum]) {
         print("[Profile] Login with forum data completed, refreshing data...")
         loadUserData()
+        // Dismiss the login view controller
+        controller.dismiss(animated: true)
     }
 
     func loginViewControllerDidCancel(_ controller: LoginViewController) {
         print("[Profile] Login cancelled")
+        controller.dismiss(animated: true)
     }
 
     @objc private func logoutTapped() {

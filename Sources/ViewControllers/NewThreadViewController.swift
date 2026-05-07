@@ -1,5 +1,5 @@
 import UIKit
-import WebKit
+import SwiftSoup
 import PhotosUI
 
 protocol NewThreadViewControllerDelegate: AnyObject {
@@ -11,29 +11,27 @@ class NewThreadViewController: UIViewController {
     weak var delegate: NewThreadViewControllerDelegate?
 
     private let fid: Int
-    private let scrollView = UIScrollView()
-    private let contentView = UIView()
     private let titleTextField = UITextField()
     private let contentTextView = UITextView()
     private let typeidButton = UIButton(type: .system)
     private let tagsTextField = UITextField()
     private let attachmentButton = UIButton(type: .system)
     private let attachmentCollectionView: UICollectionView
+    private let uploadStatusLabel = UILabel()
+    private let uploadProgressView = UIProgressView(progressViewStyle: .default)
     private let postButton = UIButton(type: .system)
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
 
-    private var webView: WKWebView?
     private var formhash: String?
-    private var posttime: Int?
     private var uploadHash: String?
     private var typeid: Int = 0
     private var isSubmitting = false
 
     private var selectedImages: [UIImage] = []
-    private var uploadedAttachments: [String] = [] // attachment IDs
-
-    // Dynamic typeid options fetched from page
+    private var uploadedAttachmentIds: [String] = []
     private var typeidOptions: [(id: Int, name: String)] = []
+
+    private let gbkEncoding = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
 
     init(fid: Int) {
         self.fid = fid
@@ -42,15 +40,9 @@ class NewThreadViewController: UIViewController {
         layout.scrollDirection = .horizontal
         layout.itemSize = CGSize(width: 80, height: 80)
         layout.minimumInteritemSpacing = 8
-        layout.sectionInset = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 20)
         self.attachmentCollectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
 
         super.init(nibName: nil, bundle: nil)
-
-        // Load typeid options from static data
-        let options = ForumManager.shared.getTypeidOptions(for: fid)
-        self.typeidOptions = options.map { (id: $0.id, name: $0.name) }
-        print("[NewThread] Loaded \(self.typeidOptions.count) typeid options for fid=\(fid)")
     }
 
     required init?(coder: NSCoder) {
@@ -60,709 +52,429 @@ class NewThreadViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
-        loadFormPage()
+        loadPrePostPage()
+        setupKeyboardHandling()
     }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        removeKeyboardObservers()
+    }
+
+    // MARK: - Keyboard
+
+    private func setupKeyboardHandling() {
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillShow(_:)), name: UIResponder.keyboardWillShowNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillHide(_:)), name: UIResponder.keyboardWillHideNotification, object: nil)
+    }
+
+    private func removeKeyboardObservers() {
+        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillShowNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillHideNotification, object: nil)
+    }
+
+    @objc private func keyboardWillShow(_ notification: Notification) {
+        guard let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+              let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double else { return }
+        additionalSafeAreaInsets.bottom = keyboardFrame.height
+        UIView.animate(withDuration: duration) { self.view.layoutIfNeeded() }
+    }
+
+    @objc private func keyboardWillHide(_ notification: Notification) {
+        guard let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double else { return }
+        additionalSafeAreaInsets.bottom = 0
+        UIView.animate(withDuration: duration) { self.view.layoutIfNeeded() }
+    }
+
+    // MARK: - UI
 
     private func setupUI() {
-        title = "发布新主题"
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
+        title = "发布帖子"
 
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .cancel,
-            target: self,
-            action: #selector(cancelTapped)
-        )
-        navigationItem.leftBarButtonItem?.tintColor = Theme.primary
-
-        view.addSubview(scrollView)
-        scrollView.addSubview(contentView)
-
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-
-            contentView.topAnchor.constraint(equalTo: scrollView.topAnchor),
-            contentView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
-            contentView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
-            contentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor)
-        ])
-
-        setupTypeidButton()
-        setupTitleField()
-        setupTagsField()
-        setupContentField()
-        setupAttachmentSection()
-        setupPostButton()
-    }
-
-    private func setupTypeidButton() {
-        let label = UILabel()
-        label.text = "分类"
-        label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = Theme.secondaryText
+        titleTextField.placeholder = "请输入标题"
+        titleTextField.font = .systemFont(ofSize: 18)
+        titleTextField.textColor = Theme.currentForeground
+        titleTextField.backgroundColor = Theme.currentMuted
+        titleTextField.layer.cornerRadius = 8
+        titleTextField.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 0))
+        titleTextField.leftViewMode = .always
+        titleTextField.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 0))
+        titleTextField.rightViewMode = .always
+        view.addSubview(titleTextField)
 
         typeidButton.setTitle("选择分类", for: .normal)
-        typeidButton.setTitleColor(Theme.foreground, for: .normal)
-        typeidButton.backgroundColor = Theme.muted
+        typeidButton.titleLabel?.font = .systemFont(ofSize: 16)
+        typeidButton.setTitleColor(Theme.currentForeground, for: .normal)
+        typeidButton.backgroundColor = Theme.currentMuted
         typeidButton.layer.cornerRadius = 8
         typeidButton.contentHorizontalAlignment = .left
         typeidButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: 12, bottom: 0, right: 12)
-        typeidButton.addTarget(self, action: #selector(typeidButtonTapped), for: .touchUpInside)
+        typeidButton.addTarget(self, action: #selector(typeidTapped), for: .touchUpInside)
+        view.addSubview(typeidButton)
 
-        contentView.addSubview(label)
-        contentView.addSubview(typeidButton)
-
-        label.translatesAutoresizingMaskIntoConstraints = false
-        typeidButton.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
-            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            label.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-
-            typeidButton.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 8),
-            typeidButton.leadingAnchor.constraint(equalTo: label.leadingAnchor),
-            typeidButton.trailingAnchor.constraint(equalTo: label.trailingAnchor),
-            typeidButton.heightAnchor.constraint(equalToConstant: 44)
-        ])
-    }
-
-    private func setupTitleField() {
-        let label = UILabel()
-        label.text = "标题"
-        label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = Theme.secondaryText
-
-        titleTextField.borderStyle = .roundedRect
-        titleTextField.placeholder = "输入帖子标题"
-        titleTextField.backgroundColor = Theme.muted
-        titleTextField.textColor = Theme.foreground
-        titleTextField.attributedPlaceholder = NSAttributedString(
-            string: "输入帖子标题",
-            attributes: [.foregroundColor: Theme.secondaryText]
-        )
-
-        contentView.addSubview(label)
-        contentView.addSubview(titleTextField)
-
-        label.translatesAutoresizingMaskIntoConstraints = false
-        titleTextField.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: typeidButton.bottomAnchor, constant: 20),
-            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            label.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-
-            titleTextField.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 8),
-            titleTextField.leadingAnchor.constraint(equalTo: label.leadingAnchor),
-            titleTextField.trailingAnchor.constraint(equalTo: label.trailingAnchor),
-            titleTextField.heightAnchor.constraint(equalToConstant: 44)
-        ])
-    }
-
-    private func setupTagsField() {
-        let label = UILabel()
-        label.text = "标签 (用逗号或空格隔开，最多5个)"
-        label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = Theme.secondaryText
-
-        tagsTextField.borderStyle = .roundedRect
-        tagsTextField.placeholder = "标签1, 标签2, 标签3"
-        tagsTextField.backgroundColor = Theme.muted
-        tagsTextField.textColor = Theme.foreground
-        tagsTextField.attributedPlaceholder = NSAttributedString(
-            string: "标签1, 标签2, 标签3",
-            attributes: [.foregroundColor: Theme.secondaryText]
-        )
-
-        contentView.addSubview(label)
-        contentView.addSubview(tagsTextField)
-
-        label.translatesAutoresizingMaskIntoConstraints = false
-        tagsTextField.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: titleTextField.bottomAnchor, constant: 20),
-            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            label.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-
-            tagsTextField.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 8),
-            tagsTextField.leadingAnchor.constraint(equalTo: label.leadingAnchor),
-            tagsTextField.trailingAnchor.constraint(equalTo: label.trailingAnchor),
-            tagsTextField.heightAnchor.constraint(equalToConstant: 44)
-        ])
-    }
-
-    private func setupContentField() {
-        let label = UILabel()
-        label.text = "内容"
-        label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = Theme.secondaryText
+        tagsTextField.placeholder = "标签（可选，多个用逗号分隔）"
+        tagsTextField.font = .systemFont(ofSize: 16)
+        tagsTextField.textColor = Theme.currentForeground
+        tagsTextField.backgroundColor = Theme.currentMuted
+        tagsTextField.layer.cornerRadius = 8
+        tagsTextField.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 0))
+        tagsTextField.leftViewMode = .always
+        tagsTextField.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 0))
+        tagsTextField.rightViewMode = .always
+        view.addSubview(tagsTextField)
 
         contentTextView.font = .systemFont(ofSize: 16)
-        contentTextView.backgroundColor = Theme.muted
-        contentTextView.textColor = Theme.foreground
-        contentTextView.layer.borderWidth = 1
-        contentTextView.layer.borderColor = Theme.border.cgColor
+        contentTextView.textColor = Theme.currentForeground
+        contentTextView.backgroundColor = Theme.currentMuted
         contentTextView.layer.cornerRadius = 8
         contentTextView.textContainerInset = UIEdgeInsets(top: 12, left: 8, bottom: 12, right: 8)
+        view.addSubview(contentTextView)
 
-        contentView.addSubview(label)
-        contentView.addSubview(contentTextView)
+        attachmentButton.setImage(UIImage(systemName: "photo"), for: .normal)
+        attachmentButton.addTarget(self, action: #selector(attachmentTapped), for: .touchUpInside)
+        view.addSubview(attachmentButton)
 
-        label.translatesAutoresizingMaskIntoConstraints = false
-        contentTextView.translatesAutoresizingMaskIntoConstraints = false
+        uploadStatusLabel.font = .systemFont(ofSize: 13)
+        uploadStatusLabel.textColor = Theme.currentSecondaryText
+        uploadStatusLabel.isHidden = true
+        view.addSubview(uploadStatusLabel)
 
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: tagsTextField.bottomAnchor, constant: 20),
-            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            label.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-
-            contentTextView.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 8),
-            contentTextView.leadingAnchor.constraint(equalTo: label.leadingAnchor),
-            contentTextView.trailingAnchor.constraint(equalTo: label.trailingAnchor),
-            contentTextView.heightAnchor.constraint(equalToConstant: 200)
-        ])
-    }
-
-    private func setupAttachmentSection() {
-        let label = UILabel()
-        label.text = "附件图片"
-        label.font = .systemFont(ofSize: 14, weight: .medium)
-        label.textColor = Theme.secondaryText
-
-        attachmentButton.setTitle("+ 添加图片", for: .normal)
-        attachmentButton.setTitleColor(Theme.primary, for: .normal)
-        attachmentButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .medium)
-        attachmentButton.addTarget(self, action: #selector(addAttachmentTapped), for: .touchUpInside)
+        uploadProgressView.isHidden = true
+        uploadProgressView.progressTintColor = Theme.primary
+        uploadProgressView.trackTintColor = Theme.currentMuted
+        view.addSubview(uploadProgressView)
 
         attachmentCollectionView.backgroundColor = .clear
-        attachmentCollectionView.register(AttachmentCell.self, forCellWithReuseIdentifier: "AttachmentCell")
-        attachmentCollectionView.dataSource = self
         attachmentCollectionView.delegate = self
+        attachmentCollectionView.dataSource = self
+        attachmentCollectionView.register(NewThreadImageCell.self, forCellWithReuseIdentifier: "ImageCell")
         attachmentCollectionView.isHidden = true
+        view.addSubview(attachmentCollectionView)
 
-        contentView.addSubview(label)
-        contentView.addSubview(attachmentButton)
-        contentView.addSubview(attachmentCollectionView)
-
-        label.translatesAutoresizingMaskIntoConstraints = false
-        attachmentButton.translatesAutoresizingMaskIntoConstraints = false
-        attachmentCollectionView.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: contentTextView.bottomAnchor, constant: 20),
-            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-
-            attachmentButton.centerYAnchor.constraint(equalTo: label.centerYAnchor),
-            attachmentButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-
-            attachmentCollectionView.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 8),
-            attachmentCollectionView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            attachmentCollectionView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            attachmentCollectionView.heightAnchor.constraint(equalToConstant: 88)
-        ])
-    }
-
-    private func setupPostButton() {
         postButton.setTitle("发布", for: .normal)
-        postButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        postButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .medium)
         postButton.backgroundColor = Theme.primary
-        postButton.setTitleColor(.white, for: .normal)
+        postButton.setTitleColor(Theme.primaryForeground, for: .normal)
         postButton.layer.cornerRadius = 8
         postButton.addTarget(self, action: #selector(postTapped), for: .touchUpInside)
+        view.addSubview(postButton)
 
-        loadingIndicator.color = .white
         loadingIndicator.hidesWhenStopped = true
+        view.addSubview(loadingIndicator)
 
-        contentView.addSubview(postButton)
-        postButton.addSubview(loadingIndicator)
+        setupConstraints()
+    }
 
-        postButton.translatesAutoresizingMaskIntoConstraints = false
-        loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
+    private func setupConstraints() {
+        for v: UIView in [titleTextField, typeidButton, tagsTextField, contentTextView, attachmentButton, uploadStatusLabel, uploadProgressView, attachmentCollectionView, postButton, loadingIndicator] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+        }
 
         NSLayoutConstraint.activate([
-            postButton.topAnchor.constraint(equalTo: attachmentCollectionView.bottomAnchor, constant: 30),
-            postButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            postButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            postButton.heightAnchor.constraint(equalToConstant: 50),
-            postButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20),
+            titleTextField.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            titleTextField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            titleTextField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            titleTextField.heightAnchor.constraint(equalToConstant: 48),
+
+            typeidButton.topAnchor.constraint(equalTo: titleTextField.bottomAnchor, constant: 12),
+            typeidButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            typeidButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            typeidButton.heightAnchor.constraint(equalToConstant: 44),
+
+            tagsTextField.topAnchor.constraint(equalTo: typeidButton.bottomAnchor, constant: 12),
+            tagsTextField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            tagsTextField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            tagsTextField.heightAnchor.constraint(equalToConstant: 44),
+
+            contentTextView.topAnchor.constraint(equalTo: tagsTextField.bottomAnchor, constant: 12),
+            contentTextView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            contentTextView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            contentTextView.heightAnchor.constraint(greaterThanOrEqualToConstant: 150),
+
+            attachmentButton.topAnchor.constraint(equalTo: contentTextView.bottomAnchor, constant: 12),
+            attachmentButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            attachmentButton.widthAnchor.constraint(equalToConstant: 44),
+            attachmentButton.heightAnchor.constraint(equalToConstant: 44),
+
+            attachmentCollectionView.centerYAnchor.constraint(equalTo: attachmentButton.centerYAnchor),
+            attachmentCollectionView.leadingAnchor.constraint(equalTo: attachmentButton.trailingAnchor, constant: 12),
+            attachmentCollectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            attachmentCollectionView.heightAnchor.constraint(equalToConstant: 80),
+
+            uploadStatusLabel.topAnchor.constraint(equalTo: attachmentButton.bottomAnchor, constant: 8),
+            uploadStatusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            uploadStatusLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+
+            uploadProgressView.topAnchor.constraint(equalTo: uploadStatusLabel.bottomAnchor, constant: 8),
+            uploadProgressView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            uploadProgressView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            uploadProgressView.heightAnchor.constraint(equalToConstant: 4),
+
+            postButton.topAnchor.constraint(equalTo: uploadProgressView.bottomAnchor, constant: 12),
+            postButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            postButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            postButton.heightAnchor.constraint(equalToConstant: 48),
 
             loadingIndicator.centerXAnchor.constraint(equalTo: postButton.centerXAnchor),
-            loadingIndicator.centerYAnchor.constraint(equalTo: postButton.centerYAnchor)
+            loadingIndicator.centerYAnchor.constraint(equalTo: postButton.centerYAnchor),
         ])
     }
 
-    private func loadFormPage() {
-        print("[NewThread] ===== DEBUG: loadFormPage =====")
-        print("[NewThread] fid: \(fid)")
-        print("[NewThread] User is logged in: \(LoginManager.shared.isLoggedIn)")
-        print("[NewThread] uid: \(LoginManager.shared.uid)")
-        print("[NewThread] =================================")
+    // MARK: - Load Pre-Post Page (URLSession + SwiftSoup)
 
-        // Remove old webView if exists
-        webView?.stopLoading()
-        webView?.removeFromSuperview()
-        webView = nil
+    private func loadPrePostPage() {
+        let urlString = "https://www.4d4y.com/forum/post.php?action=newthread&fid=\(fid)"
 
-        // Create configuration that shares cookies with URLSession
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
+        guard let url = URL(string: urlString) else { return }
 
-        // Use a WKWebsiteDataStore that shares with URLSession
-        // This ensures cookies are shared between WKWebView and native URLSession
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
-        webView.navigationDelegate = self
-        webView.isHidden = true
-        self.webView = webView
-        view.addSubview(webView)
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        request.setValue("https://www.4d4y.com/forum/forumdisplay.php?fid=\(fid)", forHTTPHeaderField: "Referer")
 
-        // First URL - without topicsubmit=yes (that only comes at submit time)
-        let postURL = URL(string: "https://www.4d4y.com/forum/post.php?action=newthread&fid=\(fid)")!
-        print("[NewThread] Loading URL: \(postURL)")
+        print("[NewThread] Loading pre-post page via URLSession: \(urlString)")
 
-        var request = URLRequest(url: postURL)
-        request.timeoutInterval = 30
+        NetworkManager.shared.session.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
 
-        webView.load(request)
+            if let error = error {
+                print("[NewThread] Pre-post page fetch failed: \(error.localizedDescription)")
+                return
+            }
 
-        print("[NewThread] WKWebView load request sent...")
+            guard let data = data, let html = self.decodeResponseData(data) else {
+                print("[NewThread] Failed to decode pre-post page")
+                return
+            }
+
+            print("[NewThread] Pre-post page loaded, HTML length: \(html.count)")
+
+            do {
+                let doc = try SwiftSoup.parse(html)
+
+                var fh: String?
+                var uh: String?
+
+                if let el = try doc.select("input[name=formhash]").first() {
+                    let v = try el.attr("value")
+                    if !v.isEmpty { fh = v }
+                }
+
+                for sel in ["#imgattachform input[name=hash]", "#attachform input[name=hash]", "input[name=hash]"] {
+                    if let el = try doc.select(sel).first() {
+                        let v = try el.attr("value")
+                        if !v.isEmpty { uh = v; break }
+                    }
+                }
+
+                if uh == nil {
+                    uh = self.extractHashFromJavaScript(html)
+                }
+
+                // Extract typeid options
+                var options: [(id: Int, name: String)] = []
+                if let select = try doc.select("#typeid").first() ?? doc.select("select[name=typeid]").first() {
+                    let optionElements = try select.select("option")
+                    for opt in optionElements {
+                        let val = try opt.attr("value")
+                        let text = try opt.text().trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let id = Int(val), id > 0 && !text.isEmpty {
+                            options.append((id: id, name: text))
+                        }
+                    }
+                }
+
+                DispatchQueue.main.async {
+                    self.formhash = fh
+                    self.uploadHash = uh
+                    if !options.isEmpty {
+                        self.typeidOptions = options
+                    }
+
+                    if let fh = fh { print("[NewThread] formhash: \(fh)") }
+                    if let uh = uh { print("[NewThread] uploadHash: \(uh)") }
+                    print("[NewThread] Found \(options.count) typeid options")
+                }
+            } catch {
+                print("[NewThread] SwiftSoup parse error: \(error)")
+            }
+        }.resume()
     }
 
-    @objc private func cancelTapped() {
-        dismiss(animated: true)
+    private func extractHashFromJavaScript(_ html: String) -> String? {
+        let patterns = [
+            "\"hash\"\\s*:\\s*\"([a-f0-9]{16,})\"",
+            "'hash'\\s*:\\s*'([a-f0-9]{16,})'",
+            "hash=([a-f0-9]{16,})",
+            "name=\"hash\"\\s+value=\"([a-f0-9]{16,})\"",
+            "value=\"([a-f0-9]{16,})\"\\s+name=\"hash\"",
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(html.startIndex..., in: html)),
+               let range = Range(match.range(at: 1), in: html) {
+                let hash = String(html[range])
+                print("[NewThread] Found upload hash via JS regex: \(hash)")
+                return hash
+            }
+        }
+        return nil
     }
 
-    @objc private func typeidButtonTapped() {
+    // MARK: - Actions
+
+    @objc private func typeidTapped() {
+        guard !typeidOptions.isEmpty else {
+            showAlert(title: "提示", message: "正在加载分类，请稍后再试")
+            return
+        }
+
         let alert = UIAlertController(title: "选择分类", message: nil, preferredStyle: .actionSheet)
-
         for option in typeidOptions {
-            let action = UIAlertAction(title: option.name, style: .default) { [weak self] _ in
+            alert.addAction(UIAlertAction(title: option.name, style: .default) { [weak self] _ in
                 self?.typeid = option.id
                 self?.typeidButton.setTitle(option.name, for: .normal)
-            }
-            alert.addAction(action)
+            })
         }
-
         alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-
-        if let popover = alert.popoverPresentationController {
-            popover.sourceView = typeidButton
-            popover.sourceRect = typeidButton.bounds
-        }
-
         present(alert, animated: true)
     }
 
-    @objc private func addAttachmentTapped() {
+    @objc private func attachmentTapped() {
         var config = PHPickerConfiguration()
-        config.selectionLimit = 5 - selectedImages.count
+        config.selectionLimit = 5
         config.filter = .images
-
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = self
         present(picker, animated: true)
     }
 
     @objc private func postTapped() {
-        print("[NewThread] ===== DEBUG: postTapped =====")
-        print("[NewThread] isSubmitting: \(isSubmitting)")
-        print("[NewThread] fid: \(fid)")
-        print("[NewThread] title: \(titleTextField.text ?? "nil")")
-        print("[NewThread] content length: \(contentTextView.text?.count ?? 0)")
-        print("[NewThread] typeid: \(typeid)")
-        print("[NewThread] tags: \(tagsTextField.text ?? "nil")")
-        print("[NewThread] webView exists: \(webView != nil)")
-        print("[NewThread] formhash: \(formhash ?? "nil")")
-        print("[NewThread] posttime: \(posttime ?? 0)")
-        print("[NewThread] uploadHash: \(uploadHash ?? "nil")")
-        print("[NewThread] selectedImages count: \(selectedImages.count)")
-        print("[NewThread] =============================")
-
-        guard !isSubmitting else {
-            print("[NewThread] Already submitting, ignoring")
-            return
-        }
+        guard !isSubmitting else { return }
 
         guard let title = titleTextField.text, !title.isEmpty else {
-            print("[NewThread] ERROR: Empty title")
-            showAlert(title: "错误", message: "请输入帖子标题")
+            showAlert(title: "错误", message: "请输入标题")
             return
         }
 
         guard let content = contentTextView.text, !content.isEmpty else {
-            print("[NewThread] ERROR: Empty content")
-            showAlert(title: "错误", message: "请输入帖子内容")
+            showAlert(title: "错误", message: "请输入内容")
             return
         }
 
-        // If formhash is missing, try to extract it now
-        if formhash == nil || posttime == nil {
-            print("[NewThread] Form data not ready, extracting now...")
-            if let webView = webView {
-                extractFormDataNow(webView) { [weak self] success in
-                    guard let self = self else { return }
-                    if success {
-                        // Retry posting after extraction
-                        DispatchQueue.main.async {
-                            self.postTapped()
-                        }
-                    } else {
-                        self.showAlert(title: "错误", message: "无法获取表单数据，请稍后再试")
-                    }
-                }
-                return
-            }
-        }
-
-        guard let webView = webView, let formhash = formhash else {
-            print("[NewThread] ERROR: webView or formhash not ready")
-            print("[NewThread] webView: \(webView == nil ? "nil" : "exists")")
-            print("[NewThread] formhash: \(formhash == nil ? "nil" : formhash!)")
+        guard formhash != nil else {
             showAlert(title: "提示", message: "正在加载表单数据，请稍后再试")
             return
         }
 
-        print("[NewThread] All checks passed, starting submission...")
-
         isSubmitting = true
-        postButton.setTitle("", for: .normal)
         loadingIndicator.startAnimating()
+        postButton.setTitle("", for: .normal)
+        postButton.isEnabled = false
 
-        // If there are images, upload them first
         if !selectedImages.isEmpty {
-            print("[NewThread] Starting upload + post flow")
-            uploadAttachmentsAndPostViaWebView(title: title, content: content, formhash: formhash)
+            uploadImagesAndPost(title: title, content: content)
         } else {
-            print("[NewThread] Starting post without images")
-            submitViaWebView(title: title, content: content, formhash: formhash)
+            doSubmitPost(title: title, content: content)
         }
     }
 
-    /// Extract form data immediately and call completion when done
-    private func extractFormDataNow(_ webView: WKWebView, completion: @escaping (Bool) -> Void) {
-        print("[NewThread] [EXTRACT_NOW] Starting immediate extraction...")
+    // MARK: - Image Upload
 
-        // First, check if page is loaded and ready
-        webView.evaluateJavaScript(#"""
-            (function() {
-                var status = {
-                    loaded: document.readyState,
-                    title: document.title,
-                    hasForm: !!document.getElementById('postform'),
-                    inputCount: document.querySelectorAll('input').length,
-                    hasFormhash: !!document.querySelector('input[name=formhash]'),
-                    isCloudflare: document.body.innerHTML.includes('cloudflare') || document.body.innerHTML.includes('Checking your browser')
-                };
-                return JSON.stringify(status);
-            })()
-        """) { [weak self] result, error in
-            if let jsonStr = result as? String {
-                print("[NewThread] [EXTRACT_NOW] Page status: \(jsonStr)")
-            }
-
-            // If page not fully loaded, wait and retry
-            if let jsonStr = result as? String, jsonStr.contains('"loaded":"loading"') || jsonStr.contains('"loaded":"interactive"') {
-                print("[NewThread] [EXTRACT_NOW] Page still loading, waiting 1s...")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    self?.extractFormDataNow(webView, completion: completion)
+    private func uploadImagesAndPost(title: String, content: String) {
+        if let hash = uploadHash {
+            doUploadImages(title: title, content: content, hash: hash)
+        } else {
+            extractUploadHash { [weak self] extractedHash in
+                guard let self = self else { return }
+                if let hash = extractedHash {
+                    self.uploadHash = hash
+                    self.doUploadImages(title: title, content: content, hash: hash)
+                } else {
+                    self.isSubmitting = false
+                    self.resetPostButton()
+                    self.showAlert(title: "错误", message: "无法获取上传标识，请稍后重试")
                 }
+            }
+        }
+    }
+
+    private func extractUploadHash(completion: @escaping (String?) -> Void) {
+        let urlString = "https://www.4d4y.com/forum/post.php?action=newthread&fid=\(fid)"
+
+        guard let url = URL(string: urlString) else { completion(nil); return }
+
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+
+        NetworkManager.shared.session.dataTask(with: request) { [weak self] data, _, _ in
+            guard let self = self, let data = data, let html = self.decodeResponseData(data) else {
+                DispatchQueue.main.async { completion(nil) }
                 return
             }
 
-            // If Cloudflare challenge, wait
-            if let jsonStr = result as? String, jsonStr.contains('"isCloudflare":true') {
-                print("[NewThread] [EXTRACT_NOW] Cloudflare challenge detected, waiting 2s...")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    self?.extractFormDataNow(webView, completion: completion)
-                }
-                return
-            }
-
-            // Proceed with extraction
-            self?.doExtractFormDataNow(webView, completion: completion)
-        }
-    }
-
-    private func doExtractFormDataNow(_ webView: WKWebView, completion: @escaping (Bool) -> Void) {
-        // First, debug: list ALL inputs on the page
-        webView.evaluateJavaScript("""
-            (function() {
-                var inputs = document.querySelectorAll('input');
-                var result = 'INPUTS_COUNT=' + inputs.length + '\\n';
-                inputs.forEach(function(inp, i) {
-                    result += 'INPUT[' + i + '] name=' + inp.name + ' id=' + inp.id + ' value=' + (inp.value ? inp.value.substring(0, 20) : 'empty') + ' type=' + inp.type + '\\n';
-                });
-                return result;
-            })()
-            """) { result, error in
-            if let info = result as? String {
-                print("[NewThread] [EXTRACT_NOW] Page inputs:\\n\(info)")
-            }
-        }
-
-        let group = DispatchGroup()
-        var extractedFormhash: String?
-        var extractedPosttime: Int?
-        var extractedUploadHash: String?
-
-        // Extract formhash - try multiple selectors
-        group.enter()
-        webView.evaluateJavaScript("""
-            (function() {
-                var field = document.querySelector('input[name=formhash]');
-                if (field) return field.value;
-                field = document.querySelector('input[id=formhash]');
-                if (field) return field.value;
-                // Search for any input with formhash in name
-                var inputs = document.querySelectorAll('input');
-                for (var i = 0; i < inputs.length; i++) {
-                    if (inputs[i].name && inputs[i].name.includes('formhash')) {
-                        return inputs[i].value;
-                    }
-                }
-                return 'NOT_FOUND';
-            })()
-            """) { result, error in
-            if let hash = result as? String, hash != "NOT_FOUND", !hash.isEmpty {
-                print("[NewThread] [EXTRACT_NOW] formhash: \(hash)")
-                extractedFormhash = hash
-                self.formhash = hash
-            } else {
-                print("[NewThread] [EXTRACT_NOW] formhash NOT FOUND or empty")
-            }
-            group.leave()
-        }
-
-        // Extract posttime
-        group.enter()
-        webView.evaluateJavaScript("document.querySelector('input[name=posttime]')?.value") { result, error in
-            if let time = result as? String, let posttime = Int(time) {
-                print("[NewThread] [EXTRACT_NOW] posttime: \(posttime)")
-                extractedPosttime = posttime
-                self.posttime = posttime
-            } else {
-                print("[NewThread] [EXTRACT_NOW] posttime NOT FOUND or empty")
-            }
-            group.leave()
-        }
-
-        // Extract upload hash
-        group.enter()
-        webView.evaluateJavaScript("(document.querySelector('#imgattachform input[name=hash]') || document.querySelector('#attachform input[name=hash]') || document.querySelector('input[name=hash]'))?.value") { result, error in
-            if let hash = result as? String, !hash.isEmpty {
-                print("[NewThread] [EXTRACT_NOW] uploadHash: \(hash)")
-                extractedUploadHash = hash
-                self.uploadHash = hash
-            }
-            group.leave()
-        }
-
-        group.notify(queue: .main) {
-            let success = extractedFormhash != nil
-            print("[NewThread] [EXTRACT_NOW] Completed. Success: \(success)")
-            completion(success)
-        }
-    }
-
-    private func submitViaWebView(title: String, content: String, formhash: String) {
-        guard let webView = webView else {
-            handleSubmitError("无法提交帖子")
-            return
-        }
-
-        let tags = tagsTextField.text ?? ""
-        let currentPosttime = self.posttime ?? Int(Date().timeIntervalSince1970)
-        let typeidValue = typeid > 0 ? String(typeid) : "0"
-
-        print("[NewThread] ===== DEBUG: Submit Info =====")
-        print("[NewThread] fid: \(fid)")
-        print("[NewThread] formhash: \(formhash)")
-        print("[NewThread] title: \(title)")
-        print("[NewThread] content length: \(content.count)")
-        print("[NewThread] typeid: \(typeidValue)")
-        print("[NewThread] tags: \(tags)")
-        print("[NewThread] posttime: \(currentPosttime)")
-        print("[NewThread] ==============================")
-
-        // Use raw string for JavaScript to avoid escaping issues
-        let js = #"""
-        (function() {
-            try {
-                var form = document.getElementById('postform') || document.querySelector('form');
-                if (!form) {
-                    console.error('Form not found!');
-                    return {success: false, error: 'no_form'};
-                }
-
-                console.log('Found form:', form.id || 'no-id');
-                console.log('Form action:', form.action);
-
-                // Set subject field
-                var subjectField = document.getElementById('subject');
-                if (subjectField) {
-                    subjectField.value = '#(title.jsEscaped)';
-                    console.log('Set subject:', subjectField.value);
-                } else {
-                    console.error('Subject field not found!');
-                }
-
-                // For WYSIWYG mode, we need to set the value in the editor
-                // The textarea is hidden and the actual content is in the WYSIWYG editor
-                var messageField = document.getElementById('e_textarea');
-                if (messageField) {
-                    // In WYSIWYG mode, set the textarea value which gets synced
-                    messageField.value = '#(content.jsEscaped)';
-                    console.log('Set e_textarea, length:', messageField.value.length);
-
-                    // Also try to set the WYSIWYG content if using wysiwyg
-                    if (typeof editor != 'undefined' && editor) {
-                        editor.html('#(content.jsEscaped)');
-                        console.log('Set WYSIWYG editor content');
-                    }
-                } else {
-                    // Fallback to textarea with name="message"
-                    var msgField = form.querySelector('textarea[name="message"]');
-                    if (msgField) {
-                        msgField.value = '#(content.jsEscaped)';
-                        console.log('Set message textarea, length:', msgField.value.length);
-                    } else {
-                        console.error('Message field not found!');
+            do {
+                let doc = try SwiftSoup.parse(html)
+                var foundHash: String?
+                for sel in ["#imgattachform input[name=hash]", "#attachform input[name=hash]", "input[name=hash]"] {
+                    if let el = try doc.select(sel).first() {
+                        let v = try el.attr("value")
+                        if !v.isEmpty {
+                            foundHash = v
+                            break
+                        }
                     }
                 }
 
-                // Set typeid
-                var typeidField = document.getElementById('typeid');
-                if (typeidField) {
-                    typeidField.value = '#(typeidValue)';
-                    console.log('Set typeid:', typeidField.value);
+                if foundHash == nil {
+                    foundHash = self.extractHashFromJavaScript(html)
                 }
 
-                // Verify message content was set correctly
-                var verifyMsg = document.getElementById('e_textarea')?.value || form.querySelector('textarea[name="message"]')?.value || '';
-                console.log('VERIFY message content length:', verifyMsg.length, 'preview:', verifyMsg.substring(0, 30));
-
-                // Set tags
-                var tagsField = document.getElementById('tags');
-                if (tagsField) {
-                    tagsField.value = '#(tags.jsEscaped)';
-                    console.log('Set tags');
+                if let hash = foundHash {
+                    print("[NewThread] extractUploadHash found: \(hash)")
+                    DispatchQueue.main.async { completion(hash) }
+                    return
                 }
-
-                // Explicitly set wysiwyg=1 hidden field if exists
-                var wysiwygField = form.querySelector('input[name=wysiwyg]');
-                if (wysiwygField) {
-                    wysiwygField.value = '1';
-                    console.log('Set wysiwyg=1');
-                }
-
-                // Explicitly set iconid= empty field if exists
-                var iconidField = form.querySelector('input[name=iconid]');
-                if (iconidField) {
-                    iconidField.value = '';
-                    console.log('Set iconid empty');
-                }
-
-                // Log ALL form values before submit (including hidden fields)
-                var allFields = form.querySelectorAll('input, select, textarea');
-                console.log('=== ALL FORM FIELDS ===');
-                for (var i = 0; i < allFields.length; i++) {
-                    var f = allFields[i];
-                    console.log('Field:', f.name || '(no name)', 'type:', f.type || 'text', '=', f.value ? f.value.substring(0, 50) : 'empty');
-                }
-                console.log('=== END FORM FIELDS ===');
-
-                console.log('Submitting form...');
-
-                // Ensure form action includes topicsubmit=yes (required by Discuz)
-                if (!form.action.includes('topicsubmit=yes')) {
-                    console.log('Adding topicsubmit=yes to form action');
-                    form.action = form.action + '&topicsubmit=yes';
-                }
-                console.log('Final form action:', form.action);
-
-                // Try clicking the submit button instead of form.submit()
-                var submitBtn = document.getElementById('postsubmit');
-                if (submitBtn) {
-                    console.log('Found submit button, clicking...');
-                    submitBtn.click();
-                } else {
-                    console.log('Submit button not found, using form.submit()');
-                    form.submit();
-                }
-                return {success: true, formAction: form.action};
-            } catch(e) {
-                console.error('JS Exception:', e.message, e.stack);
-                return {success: false, error: e.message};
-            }
-        })();
-            """#
-
-        print("[NewThread] Executing JavaScript to set form values and submit...")
-
-        // First, check if form exists
-        webView.evaluateJavaScript("document.getElementById('postform') ? 'FORM_FOUND' : 'FORM_NOT_FOUND'") { [weak self] result, error in
-            guard let self = self else { return }
-            print("[NewThread] Form check: \(String(describing: result))")
-
-            if let error = error {
-                print("[NewThread] Form check JS ERROR: \(error.localizedDescription)")
+            } catch {
+                print("[NewThread] extractUploadHash parse error: \(error)")
             }
 
-            // Now execute the actual submit JavaScript
-            self.executeSubmitJS(webView, title: title, content: content, formhash: formhash, js: js)
-        }
+            DispatchQueue.main.async { completion(nil) }
+        }.resume()
     }
 
-    private func executeSubmitJS(_ webView: WKWebView, title: String, content: String, formhash: String, js: String) {
-        webView.evaluateJavaScript(js) { [weak self] result, error in
-            if let error = error {
-                print("[NewThread] JS ERROR: \(error.localizedDescription)")
-                self?.handleSubmitError("提交失败: \(error.localizedDescription)")
-                return
-            }
-
-            print("[NewThread] JS Result: \(String(describing: result))")
-            print("[NewThread] Form submitted, waiting for navigation...")
-
-            // Also log the current URL
-            print("[NewThread] Current URL: \(self?.webView?.url?.absoluteString ?? "nil")")
-        }
-
-        // Wait for form submission and navigation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-            self?.checkSubmitResult()
-        }
-    }
-
-    private func uploadAttachmentsAndPostViaWebView(title: String, content: String, formhash: String) {
-        // For simplicity, post without attachments first if upload hash not available
-        guard let uploadHash = self.uploadHash else {
-            showAlert(title: "提示", message: "无法上传附件，将以纯文本形式发帖")
-            submitViaWebView(title: title, content: content, formhash: formhash)
-            return
-        }
-
-        let group = DispatchGroup()
+    private func doUploadImages(title: String, content: String, hash: String) {
+        let total = selectedImages.count
+        var completedCount = 0
         var uploadedIds: [String] = []
+        var failedCount = 0
+
+        DispatchQueue.main.async {
+            self.uploadStatusLabel.isHidden = false
+            self.uploadProgressView.isHidden = false
+            self.uploadProgressView.progress = 0.0
+            self.uploadStatusLabel.textColor = Theme.secondaryText
+            self.uploadStatusLabel.text = "正在上传图片 (0/\(total))..."
+        }
+
+        let group = DispatchGroup()
 
         for (index, image) in selectedImages.enumerated() {
             group.enter()
-
-            uploadImage(image, hash: uploadHash) { [weak self] result in
+            uploadImage(image, hash: hash) { [weak self] result in
+                guard let self = self else { group.leave(); return }
                 switch result {
                 case .success(let attachmentId):
                     uploadedIds.append(attachmentId)
                     print("[NewThread] Uploaded image \(index + 1): \(attachmentId)")
                 case .failure(let error):
+                    failedCount += 1
                     print("[NewThread] Failed to upload image \(index + 1): \(error)")
+                }
+                completedCount += 1
+                DispatchQueue.main.async {
+                    self.uploadStatusLabel.text = "正在上传图片 (\(completedCount)/\(total))..."
+                    self.uploadProgressView.setProgress(Float(completedCount) / Float(total), animated: true)
                 }
                 group.leave()
             }
@@ -771,276 +483,209 @@ class NewThreadViewController: UIViewController {
         group.notify(queue: .main) { [weak self] in
             guard let self = self else { return }
 
-            // Build content with attachments
-            var fullContent = content
-            for attachmentId in uploadedIds {
-                fullContent += "\n[attachimg]\(attachmentId)[/attachimg]"
+            if failedCount > 0 && uploadedIds.isEmpty {
+                self.uploadStatusLabel.textColor = .systemRed
+                self.uploadStatusLabel.text = "图片上传全部失败"
+                self.isSubmitting = false
+                self.resetPostButton()
+                self.showAlert(title: "上传失败", message: "\(failedCount) 张图片上传失败，请重试")
+                return
             }
 
-            self.submitViaWebView(title: title, content: fullContent, formhash: formhash)
+            if failedCount > 0 {
+                self.uploadStatusLabel.textColor = .systemOrange
+                self.uploadStatusLabel.text = "已上传 \(uploadedIds.count)/\(total) 张，\(failedCount) 张失败"
+            } else {
+                self.uploadStatusLabel.textColor = .systemGreen
+                self.uploadStatusLabel.text = "全部 \(total) 张图片上传成功"
+            }
+
+            self.uploadedAttachmentIds = uploadedIds
+            self.doSubmitPost(title: title, content: content)
         }
     }
 
-    private func uploadAttachmentsAndPost(title: String, content: String, formhash: String) {
-        guard let uploadHash = self.uploadHash else {
-            showAlert(title: "错误", message: "无法上传附件，请重试")
-            isSubmitting = false
-            loadingIndicator.stopAnimating()
-            postButton.setTitle("发布", for: .normal)
+    // MARK: - Native HTTP POST Submission
+
+    private func doSubmitPost(title: String, content: String) {
+        guard let formhash = formhash else {
+            handleSubmitError("formhash 缺失")
             return
         }
 
-        let group = DispatchGroup()
-        var uploadedIds: [String] = []
+        var params: [(String, String)] = [
+            ("formhash", formhash),
+            ("posttime", String(Int(Date().timeIntervalSince1970))),
+            ("wysiwyg", "0"),
+            ("usesig", "1"),
+            ("subject", title),
+            ("message", content),
+            ("attention_add", "1"),
+        ]
 
-        for (index, image) in selectedImages.enumerated() {
-            group.enter()
-
-            uploadImage(image, hash: uploadHash) { [weak self] result in
-                switch result {
-                case .success(let attachmentId):
-                    uploadedIds.append(attachmentId)
-                    print("[NewThread] Uploaded image \(index + 1): \(attachmentId)")
-                case .failure(let error):
-                    print("[NewThread] Failed to upload image \(index + 1): \(error)")
-                }
-                group.leave()
-            }
+        if let tags = tagsTextField.text, !tags.isEmpty {
+            params.append(("tags", tags))
         }
 
-        group.notify(queue: .main) { [weak self] in
-            guard let self = self else { return }
-
-            // Build content with attachments
-            var fullContent = content
-
-            // Insert attachment references at the end of content
-            for attachmentId in uploadedIds {
-                fullContent += "\n[attachimg]\(attachmentId)[/attachimg]"
-            }
-
-            self.submitViaWebView(title: title, content: fullContent, formhash: formhash)
+        for attachId in uploadedAttachmentIds {
+            params.append(("attachnew[\(attachId)][description]", ""))
         }
-    }
 
-    private func uploadImage(_ image: UIImage, hash: String, completion: @escaping (Result<String, Error>) -> Void) {
-        print("[NewThread] ===== DEBUG: uploadImage =====")
-        print("[NewThread] hash: \(hash)")
-        print("[NewThread] fid: \(fid)")
-
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            print("[NewThread] ERROR: Failed to convert image to JPEG data")
-            completion(.failure(NSError(domain: "ImageError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to data"])))
-            return
-        }
-        print("[NewThread] Image data size: \(imageData.count) bytes")
-
-        guard let uid = LoginManager.shared.uid as Int?, uid > 0 else {
-            print("[NewThread] ERROR: Not logged in or invalid uid: \(LoginManager.shared.uid)")
-            completion(.failure(NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not logged in"])))
-            return
-        }
-        print("[NewThread] uid: \(uid)")
-
-        let urlString = "https://www.4d4y.com/forum/misc.php?action=swfupload&operation=upload&simple=1&type=image"
-        print("[NewThread] URL: \(urlString)")
-
+        let typeidParam = typeid > 0 ? "&typeid=\(typeid)" : ""
+        let urlString = "https://www.4d4y.com/forum/post.php?action=newthread&fid=\(fid)\(typeidParam)&topicsubmit=yes"
         guard let url = URL(string: urlString) else {
-            print("[NewThread] ERROR: Invalid URL")
-            completion(.failure(NSError(domain: "URLError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
+            handleSubmitError("无效的URL")
             return
         }
 
-        let boundary = "Boundary-\(UUID().uuidString)"
+        guard let bodyData = buildGBKFormBody(params) else {
+            handleSubmitError("编码失败")
+            return
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("https://www.4d4y.com/forum/post.php?action=newthread&fid=\(fid)", forHTTPHeaderField: "Referer")
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        request.httpBody = bodyData
 
-        var body = Data()
+        print("[NewThread] Submitting via native POST to: \(urlString)")
+        print("[NewThread] formhash used: \(formhash)")
 
-        // Add uid field
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"uid\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(uid)\r\n".data(using: .utf8)!)
-
-        // Add hash field
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"hash\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(hash)\r\n".data(using: .utf8)!)
-
-        // Add file field
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"Filedata\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-        body.append(imageData)
-        body.append("\r\n".data(using: .utf8)!)
-
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-
-        request.httpBody = body
-
-        print("[NewThread] Starting upload request...")
-
-        NetworkManager.shared.session.dataTask(with: request) { data, response, error in
-            print("[NewThread] Upload request completed")
+        NetworkManager.shared.session.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
 
             if let error = error {
-                print("[NewThread] Upload ERROR: \(error.localizedDescription)")
-                completion(.failure(error))
+                DispatchQueue.main.async { self.handleSubmitError("网络错误: \(error.localizedDescription)") }
                 return
             }
 
             if let httpResponse = response as? HTTPURLResponse {
-                print("[NewThread] Upload HTTP Status: \(httpResponse.statusCode)")
-                print("[NewThread] Upload Response URL: \(httpResponse.url?.absoluteString ?? "nil")")
-            }
+                let finalURL = httpResponse.url?.absoluteString ?? ""
+                print("[NewThread] Response status: \(httpResponse.statusCode), finalURL: \(finalURL)")
 
-            guard let data = data,
-                  let responseText = String(data: data, encoding: .utf8) else {
-                print("[NewThread] Upload ERROR: No data or invalid encoding")
-                completion(.failure(NSError(domain: "ResponseError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])))
-                return
-            }
-
-            print("[NewThread] Upload response length: \(responseText.count)")
-            print("[NewThread] Upload response (first 200): \(String(responseText.prefix(200)))")
-
-            // Parse attachment ID from response
-            let trimmed = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            // Try to extract numeric ID directly
-            if let attachmentId = trimmed.components(separatedBy: "\n").first,
-               !attachmentId.isEmpty,
-               attachmentId.range(of: "^[0-9]+$", options: .regularExpression) != nil {
-                completion(.success(attachmentId))
-            } else if trimmed.contains("attachment") || trimmed.contains("aid") {
-                // Try to extract ID using regex
-                if let regex = try? NSRegularExpression(pattern: "aid[=:\\s]*([0-9]+)", options: []),
-                   let match = regex.firstMatch(in: trimmed, options: [], range: NSRange(trimmed.startIndex..., in: trimmed)),
-                   let range = Range(match.range(at: 1), in: trimmed) {
-                    let id = String(trimmed[range])
-                    completion(.success(id))
-                } else {
-                    completion(.failure(NSError(domain: "ParseError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Could not parse attachment ID from: \(trimmed)"])))
-                }
-            } else {
-                // Check for error indicators
-                if trimmed.contains("error") || trimmed.contains("fail") {
-                    completion(.failure(NSError(domain: "UploadError", code: -1, userInfo: [NSLocalizedDescriptionKey: trimmed])))
-                } else {
-                    // Assume success and use the response as ID
-                    let id = trimmed
-                    if !id.isEmpty {
-                        completion(.success(id))
-                    } else {
-                        completion(.failure(NSError(domain: "ResponseError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Empty response"])))
-                    }
+                if finalURL.contains("viewthread.php") || finalURL.contains("forumdisplay.php") {
+                    print("[NewThread] Redirect to thread page detected - success")
+                    DispatchQueue.main.async { self.handleSubmitSuccess() }
+                    return
                 }
             }
+
+            if let data = data, let html = self.decodeResponseData(data) {
+                print("[NewThread] Response HTML length: \(html.count)")
+                print("[NewThread] Response preview: \(html.prefix(500))")
+
+                if html.contains("alert_right") {
+                    print("[NewThread] Found alert_right - success")
+                    DispatchQueue.main.async { self.handleSubmitSuccess() }
+                    return
+                }
+
+                if html.contains("url=viewthread") || html.contains("url=forumdisplay") {
+                    print("[NewThread] Found meta refresh to viewthread - success")
+                    DispatchQueue.main.async { self.handleSubmitSuccess() }
+                    return
+                }
+
+                if html.contains("succeedhandle") || html.contains("post_newthread_succeed") {
+                    print("[NewThread] Found succeed handler - success")
+                    DispatchQueue.main.async { self.handleSubmitSuccess() }
+                    return
+                }
+
+                if html.contains("发帖成功") || html.contains("发布成功") || html.contains("非常感谢") {
+                    print("[NewThread] Found success text - success")
+                    DispatchQueue.main.async { self.handleSubmitSuccess() }
+                    return
+                }
+
+                if let errorMsg = self.extractErrorMessage(from: html) {
+                    print("[NewThread] Found error message: \(errorMsg)")
+                    DispatchQueue.main.async { self.handleSubmitError(errorMsg) }
+                    return
+                }
+            }
+
+            DispatchQueue.main.async { self.handleSubmitError("提交失败，请重试") }
         }.resume()
     }
 
+    // MARK: - GBK Encoding Helpers
+
+    private func buildGBKFormBody(_ params: [(String, String)]) -> Data? {
+        var parts: [String] = []
+        for (key, value) in params {
+            guard let encodedValue = gbkPercentEncode(value) else { return nil }
+            parts.append("\(key)=\(encodedValue)")
+        }
+        return parts.joined(separator: "&").data(using: .ascii)
+    }
+
+    private func gbkPercentEncode(_ string: String) -> String? {
+        guard let data = string.data(using: gbkEncoding) else { return nil }
+        var encoded = ""
+        for byte in data {
+            let ch = Character(UnicodeScalar(byte))
+            if ch.isASCII && (ch.isLetter || ch.isNumber || "-._~".contains(ch)) {
+                encoded.append(ch)
+            } else {
+                encoded += String(format: "%%%02X", byte)
+            }
+        }
+        return encoded
+    }
+
+    private func decodeResponseData(_ data: Data) -> String? {
+        let gb18030 = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
+        return String(data: data, encoding: gb18030) ?? String(data: data, encoding: .utf8)
+    }
+
+    private func extractErrorMessage(from html: String) -> String? {
+        if let mtRange = html.range(of: "messagetext") {
+            let afterMt = html[mtRange.upperBound...]
+            if let pStart = afterMt.range(of: "<p>"),
+               let pEnd = html[pStart.upperBound...].range(of: "</p>") {
+                let content = String(html[pStart.upperBound..<pEnd.lowerBound])
+                let cleaned = content.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !cleaned.isEmpty { return cleaned }
+            }
+        }
+
+        let patterns = ["alert_error", "alert_info"]
+        for pattern in patterns {
+            if let range = html.range(of: pattern),
+               let divStart = html[range.lowerBound...].range(of: ">"),
+               let divEnd = html[divStart.upperBound...].range(of: "</div>") {
+                let content = String(html[divStart.upperBound..<divEnd.lowerBound])
+                let cleaned = content.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !cleaned.isEmpty { return cleaned }
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Result Handling
+
     private func handleSubmitSuccess() {
+        print("[NewThread] Submit success!")
         isSubmitting = false
         loadingIndicator.stopAnimating()
         delegate?.newThreadViewControllerDidPost(self)
         dismiss(animated: true)
     }
 
-    private func checkSubmitResult() {
-        guard let webView = webView else {
-            print("[NewThread] ERROR: webView is nil")
-            handleSubmitError("无法检查提交结果")
-            return
-        }
-
-        let currentURL = webView.url?.absoluteString ?? "nil"
-        print("[NewThread] ===== DEBUG: checkSubmitResult =====")
-        print("[NewThread] Current URL: \(currentURL)")
-        print("[NewThread] isSubmitting: \(isSubmitting)")
-
-        // Success: Navigated to viewthread page
-        if currentURL.contains("viewthread") && currentURL.contains("tid=") {
-            print("[NewThread] SUCCESS: Navigated to thread view")
-            handleSubmitSuccess()
-            return
-        }
-
-        // Success: URL contains tid= but not post.php
-        if currentURL.contains("tid=") && !currentURL.contains("post.php") {
-            print("[NewThread] SUCCESS: URL contains tid, assuming success")
-            handleSubmitSuccess()
-            return
-        }
-
-        // Check for error messages on page
-        webView.evaluateJavaScript("document.body.innerText") { [weak self] result, error in
-            guard let self = self else { return }
-
-            if let error = error {
-                print("[NewThread] JS Error getting page text: \(error.localizedDescription)")
-            }
-
-            if let text = result as? String {
-                let textPreview = String(text.prefix(500)).replacingOccurrences(of: "\n", with: " ")
-                print("[NewThread] Page text (first 500): \(textPreview)")
-
-                // Check for various success indicators
-                let successIndicators = ["发帖成功", "发布成功", "succeed", "发布主题成功", "主题发布成功", "操作成功", "发帖完成"]
-                for indicator in successIndicators {
-                    if text.contains(indicator) {
-                        print("[NewThread] SUCCESS: Found success indicator: \(indicator)")
-                        self.handleSubmitSuccess()
-                        return
-                    }
-                }
-
-                // Check for error indicators
-                let errorIndicators = [
-                    "错误", "失败", "请登录", "登录后方可", "验证码",
-                    "请输入", "不允许", "非法", "操作失败", "发表帖子",
-                    "请勿", "重复发帖", "禁止", "受限"
-                ]
-                for indicator in errorIndicators {
-                    if text.contains(indicator) {
-                        print("[NewThread] ERROR: Found error indicator: \(indicator)")
-                        self.handleSubmitError("发帖失败: \(indicator)")
-                        return
-                    }
-                }
-            }
-
-            // Check URL again after JS evaluation
-            let urlAfterCheck = self.webView?.url?.absoluteString ?? currentURL
-            print("[NewThread] URL after JS check: \(urlAfterCheck)")
-
-            // Final determination based on URL
-            if urlAfterCheck.contains("viewthread") {
-                print("[NewThread] SUCCESS: URL changed to viewthread")
-                self.handleSubmitSuccess()
-            } else if urlAfterCheck.contains("topicsubmit=yes") || urlAfterCheck.contains("action=newthread") {
-                // Still on post page - submission might have failed
-                print("[NewThread] ERROR: Still on newthread page after submission")
-                self.handleSubmitError("发帖失败，请检查是否已登录或内容是否符合要求")
-            } else if urlAfterCheck != currentURL {
-                // URL changed to something else - might be success
-                print("[NewThread] URL changed to: \(urlAfterCheck)")
-                self.handleSubmitSuccess()
-            } else {
-                print("[NewThread] ERROR: Could not determine result")
-                self.handleSubmitError("无法确认发帖是否成功，请手动检查")
-            }
-        }
-    }
-
     private func handleSubmitError(_ message: String) {
+        print("[NewThread] Submit error: \(message)")
         isSubmitting = false
         loadingIndicator.stopAnimating()
+        resetPostButton()
+        showAlert(title: "提交失败", message: message)
+    }
+
+    private func resetPostButton() {
         postButton.setTitle("发布", for: .normal)
-        showAlert(title: "错误", message: message)
+        postButton.isEnabled = true
     }
 
     private func showAlert(title: String, message: String) {
@@ -1048,351 +693,121 @@ class NewThreadViewController: UIViewController {
         alert.addAction(UIAlertAction(title: "确定", style: .default))
         present(alert, animated: true)
     }
-}
 
-// MARK: - WKNavigationDelegate
+    private func updateAttachmentUI() {
+        attachmentCollectionView.isHidden = selectedImages.isEmpty
+        attachmentCollectionView.reloadData()
+    }
 
-extension NewThreadViewController: WKNavigationDelegate {
+    // MARK: - Image Compression (matching hipda)
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        let urlString = webView.url?.absoluteString ?? ""
-        let expectedURL = "https://www.4d4y.com/forum/post.php?action=newthread&fid=\(fid)"
+    private func compressImageForUpload(_ image: UIImage) -> Data? {
+        let maxDimension: CGFloat = 2560
+        let maxFileSize = 2 * 1024 * 1024
+        let quality: CGFloat = 0.8
 
-        print("[NewThread] ===== DEBUG: didFinish =====")
-        print("[NewThread] URL: \(urlString)")
-        print("[NewThread] Expected URL: \(expectedURL)")
-        print("[NewThread] isSubmitting: \(isSubmitting)")
-        print("[NewThread] =============================")
+        var workingImage = scaleDown(image, maxDimension: maxDimension)
+        guard var data = workingImage.jpegData(compressionQuality: quality) else { return nil }
 
-        // If we're in submitting state and navigated to viewthread, it's success
-        if isSubmitting && urlString.contains("viewthread") && urlString.contains("tid=") {
-            print("[NewThread] SUCCESS: Thread view loaded")
-            handleSubmitSuccess()
+        print("[NewThread] Initial compressed size: \(data.count / 1024)KB, dimensions: \(workingImage.size.width)x\(workingImage.size.height)")
+
+        for i in 0..<5 {
+            if data.count <= maxFileSize { break }
+            let dim = maxDimension * CGFloat(5 - i) * 0.1
+            workingImage = scaleDown(image, maxDimension: dim)
+            guard let newData = workingImage.jpegData(compressionQuality: quality) else { break }
+            data = newData
+            print("[NewThread] Reduced to \(data.count / 1024)KB at \(Int(dim))px max dimension")
+        }
+
+        return data
+    }
+
+    private func scaleDown(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let maxSide = max(image.size.width, image.size.height)
+        guard maxSide > maxDimension else { return image }
+
+        let scale = maxDimension / maxSide
+        let newSize = CGSize(width: round(image.size.width * scale), height: round(image.size.height * scale))
+
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    // MARK: - Image Upload (multipart POST)
+
+    private func uploadImage(_ image: UIImage, hash: String, completion: @escaping (Result<String, Error>) -> Void) {
+        guard let imageData = compressImageForUpload(image) else {
+            completion(.failure(NSError(domain: "ImageError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to compress image"])))
             return
         }
 
-        // If we're in submitting state and still on post page, check for errors
-        if isSubmitting {
-            webView.evaluateJavaScript("document.body.innerText") { [weak self] result, _ in
-                guard let self = self, let text = result as? String else { return }
+        print("[NewThread] Uploading image: \(imageData.count / 1024)KB")
 
-                let errorIndicators = ["错误", "失败", "请登录", "登录后方可", "验证码", "请输入", "不允许", "非法", "禁止"]
-                for indicator in errorIndicators {
-                    if text.contains(indicator) {
-                        print("[NewThread] ERROR: Found error on page: \(indicator)")
-                        self.handleSubmitError("发帖失败: \(indicator)")
-                        return
-                    }
-                }
-            }
+        let uid = LoginManager.shared.uid
+        guard uid > 0 else {
+            completion(.failure(NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not logged in"])))
             return
         }
 
-        // Normal page load - extract form data
-        // Check URL - topicsubmit=yes in URL means something is wrong
-        if urlString.contains("topicsubmit=yes") {
-            print("[NewThread] [WARNING] URL contains topicsubmit=yes - possible redirect!")
+        let urlString = "https://www.4d4y.com/forum/misc.php?action=swfupload&operation=upload&simple=1&type=image"
+        guard let url = URL(string: urlString) else {
+            completion(.failure(NSError(domain: "URLError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
+            return
         }
 
-        // Check if URL is correct
-        if !urlString.contains("action=newthread") || !urlString.contains("fid=\(fid)") {
-            print("[NewThread] [WARNING] URL does not match expected pattern for newthread!")
-        }
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("https://www.4d4y.com/forum/post.php?action=newthread&fid=\(fid)", forHTTPHeaderField: "Referer")
 
-        // Extract immediately without delay
-        extractFormData(webView)
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"uid\"\r\n\r\n\(uid)\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"hash\"\r\n\r\n\(hash)\r\n".data(using: .utf8)!)
 
-        // Also wait for JS to finish loading and try again with longer delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            print("[NewThread] [RETRY] Extracting form data after 2s delay...")
-            self?.extractFormData(webView)
-        }
-    }
+        let filename = "Hi_\(Int(Date().timeIntervalSince1970)).jpg"
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"Filedata\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
 
-    private func extractFormData(_ webView: WKWebView) {
-        print("[NewThread] [EXTRACT] Starting form data extraction...")
+        request.httpBody = body
 
-        // First, check page title and body text
-        webView.evaluateJavaScript("document.title + ' | ' + document.body.innerText.substring(0, 200)") { result, error in
-            if let info = result as? String {
-                print("[NewThread] [PAGE] Title+Text: \(info)")
-            }
-        }
-
-        // Check if Cloudflare challenge
-        webView.evaluateJavaScript("(document.body.innerHTML.includes('cloudflare') || document.body.innerHTML.includes('Checking your browser') || document.getElementById('challenge-body')) ? 'CLOUDFLARE' : 'OK'") { result, error in
-            if let status = result as? String, status == "CLOUDFLARE" {
-                print("[NewThread] [WARNING] Cloudflare challenge detected!")
-            }
-        }
-
-        // Check if form exists
-        webView.evaluateJavaScript("""
-        (function() {
-            var form = document.getElementById('postform');
-            if (!form) {
-                var forms = document.querySelectorAll('form');
-                console.log('Forms found: ' + forms.length);
-                forms.forEach(function(f, i) {
-                    console.log('Form ' + i + ': id=' + f.id + ', action=' + f.action);
-                });
-                return 'NO_FORM';
-            }
-            return 'FORM_EXISTS';
-        })();
-        """) { result, error in
-            print("[NewThread] [FORM_CHECK] \(String(describing: result))")
+        NetworkManager.shared.session.dataTask(with: request) { data, _, error in
             if let error = error {
-                print("[NewThread] [FORM_CHECK] Error: \(error)")
+                completion(.failure(error))
+                return
             }
-        }
-
-        // Extract formhash
-        webView.evaluateJavaScript("document.querySelector('input[name=formhash]')?.value") { [weak self] result, error in
-            guard let self = self else { return }
-
-            if let hash = result as? String, !hash.isEmpty {
-                print("[NewThread] [FORMHASH] Found via JS: \(hash)")
-                self.formhash = hash
-            } else {
-                print("[NewThread] [FORMHASH] Not found via JS, trying HTML parsing...")
-                webView.evaluateJavaScript("document.body.innerHTML") { [weak self] htmlResult, _ in
-                    guard let html = htmlResult as? String else { return }
-
-                    print("[NewThread] [FORMHASH] HTML length: \(html.count)")
-
-                    if html.contains("formhash") {
-                        print("[NewThread] [FORMHASH] HTML contains 'formhash'")
-                        if let range = html.range(of: "formhash\" value=\"") {
-                            let startIndex = range.upperBound
-                            let endIndex = html.index(startIndex, offsetBy: 20, limitedBy: html.endIndex) ?? html.endIndex
-                            let substring = String(html[startIndex..<endIndex])
-                            if let hashEnd = substring.firstIndex(of: "\"") {
-                                let hash = String(substring[..<hashEnd])
-                                print("[NewThread] [FORMHASH] Extracted from HTML: \(hash)")
-                                self?.formhash = hash
-                            }
-                        }
-                    } else {
-                        print("[NewThread] [FORMHASH] 'formhash' not found in HTML")
-                    }
-
-                    self?.logFormFields(webView)
-                }
+            guard let data = data, let responseString = String(data: data, encoding: .utf8) else {
+                completion(.failure(NSError(domain: "UploadError", code: -1, userInfo: [NSLocalizedDescriptionKey: "No data"])))
+                return
             }
-        }
+            print("[NewThread] Upload response: \(responseString)")
 
-        // Extract posttime
-        webView.evaluateJavaScript("document.querySelector('input[name=posttime]')?.value") { [weak self] result, error in
-            if let time = result as? String, let posttime = Int(time) {
-                print("[NewThread] [POSTTIME] Found: \(posttime)")
-                self?.posttime = posttime
-            } else {
-                print("[NewThread] [POSTTIME] Not found")
-            }
-        }
-
-        // Extract upload hash
-        webView.evaluateJavaScript("(document.querySelector('#imgattachform input[name=hash]') || document.querySelector('#attachform input[name=hash]') || document.querySelector('input[name=hash]'))?.value") { [weak self] result, error in
-            if let hash = result as? String, !hash.isEmpty {
-                print("[NewThread] [UPLOAD_HASH] Found: \(hash)")
-                self?.uploadHash = hash
-            } else {
-                print("[NewThread] [UPLOAD_HASH] Not found")
-            }
-        }
-
-        // Extract typeid options from select element - try multiple methods
-        webView.evaluateJavaScript(#"""
-        (function() {
-            console.log('[TYPEID] Starting extraction...');
-
-            // Try to find the float_typeid div first (user's HTML shows this structure)
-            var floatDiv = document.querySelector('.float_typeid');
-            var typeidSelect = null;
-
-            if (floatDiv) {
-                console.log('[TYPEID] Found .float_typeid div');
-                typeidSelect = floatDiv.querySelector('select[name="typeid"]') || floatDiv.querySelector('select#typeid') || floatDiv.querySelector('select');
-                if (typeidSelect) {
-                    console.log('[TYPEID] Found select inside .float_typeid:', typeidSelect.name, typeidSelect.id);
-                }
+            let parts = responseString.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "|")
+            if parts.count >= 3, let aid = Int(parts[2]), aid > 0 {
+                completion(.success(parts[2]))
+                return
             }
 
-            // Fallback to direct ID lookup
-            if (!typeidSelect) {
-                typeidSelect = document.getElementById('typeid');
-                console.log('[TYPEID] Fallback to getElementById:', typeidSelect ? 'found' : 'NOT found');
-            }
-
-            // Fallback to querySelector
-            if (!typeidSelect) {
-                typeidSelect = document.querySelector('select[name="typeid"]');
-                console.log('[TYPEID] Fallback to querySelector by name:', typeidSelect ? 'found' : 'NOT found');
-            }
-
-            if (!typeidSelect) {
-                console.log('[TYPEID] NO SELECT FOUND');
-                return 'NO_TYPEID';
-            }
-
-            console.log('[TYPEID] Select found. options.length =', typeidSelect.options.length);
-
-            // Use innerHTML to extract options (more reliable than options collection)
-            var innerHTML = typeidSelect.innerHTML;
-            console.log('[TYPEID] innerHTML:', innerHTML.substring(0, 500));
-
-            // Parse options from innerHTML
-            var options = [];
-            var optionRegex = /<option[^>]*value="([^"]*)"[^>]*>([^<]*)</gi;
-            var match;
-            while ((match = optionRegex.exec(innerHTML)) !== null) {
-                var value = match[1];
-                var text = match[2].trim();
-                // Decode HTML entities
-                text = text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-                options.push({value: value, text: text});
-                console.log('[TYPEID] Parsed option:', value, '->', text);
-            }
-
-            console.log('[TYPEID] Total parsed options:', options.length);
-            console.log('[TYPEID] Final JSON:', JSON.stringify(options));
-            return JSON.stringify(options);
-        })();
-        """#) { [weak self] result, error in
-            guard let self = self else { return }
-
-            if let error = error {
-                print("[NewThread] [TYPEID] JS Error: \(error.localizedDescription)")
-            }
-
-            print("[NewThread] [TYPEID] Raw result: \(String(describing: result))")
-
-            if let json = result as? String, !json.isEmpty, json != "NO_TYPEID" {
-                print("[NewThread] [TYPEID] Options JSON: \(json)")
-
-                // Parse the JSON and update typeidOptions
-                if let data = json.data(using: .utf8),
-                   let options = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-                    var parsedOptions: [(id: Int, name: String)] = []
-                    for opt in options {
-                        if let valueStr = opt["value"] as? String,
-                           let value = Int(valueStr),
-                           let text = opt["text"] as? String, !text.isEmpty {
-                            parsedOptions.append((id: value, name: text))
-                        }
-                    }
-                    if !parsedOptions.isEmpty {
-                        self.typeidOptions = parsedOptions
-                        print("[NewThread] [TYPEID] Updated options count: \(parsedOptions.count)")
-                        print("[NewThread] [TYPEID] Options: \(parsedOptions)")
-                    }
-                }
-            } else {
-                print("[NewThread] [TYPEID] Not found or empty result")
-
-                // Try alternative: parse from HTML directly
-                webView.evaluateJavaScript("document.getElementById('typeid')?.outerHTML || 'NOT_FOUND'") { result, error in
-                    print("[NewThread] [TYPEID] Alternative HTML check: \(String(describing: result))")
-                }
-            }
-        }
-    }
-
-    private func logFormFields(_ webView: WKWebView) {
-        webView.evaluateJavaScript("""
-        (function() {
-            var form = document.getElementById('postform') || document.querySelector('form');
-            if (!form) {
-                console.log('No form found');
-                return;
-            }
-            console.log('Form found, fields:');
-            var fields = form.querySelectorAll('input, select, textarea');
-            fields.forEach(function(f) {
-                console.log(' - ' + f.name + ' (type=' + f.type + ', id=' + f.id + ', value=' + (f.value ? f.value.substring(0, 50) : 'empty') + ')');
-            });
-
-            // Log typeid select specifically
-            var typeidSelect = document.getElementById('typeid');
-            console.log('Typeid select exists:', typeidSelect !== null);
-            if (typeidSelect) {
-                console.log('Typeid select options count:', typeidSelect.options.length);
-                for (var i = 0; i < typeidSelect.options.length; i++) {
-                    console.log('  [' + i + '] value=' + typeidSelect.options[i].value + ', text=' + typeidSelect.options[i].text);
-                }
-                console.log('Typeid select innerHTML:', typeidSelect.innerHTML.substring(0, 300));
-            } else {
-                console.log('Typeid select NOT FOUND in DOM');
-            }
-        })();
-        """) { result, error in
-            if let error = error {
-                print("[NewThread] Error logging form fields: \(error)")
-            }
-        }
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        print("[NewThread] ===== DEBUG: didFail =====")
-        print("[NewThread] Error: \(error.localizedDescription)")
-        print("[NewThread] isSubmitting: \(isSubmitting)")
-        print("[NewThread] ==========================")
-
-        if !isSubmitting {
-            loadingIndicator.stopAnimating()
-            postButton.setTitle("发布", for: .normal)
-        }
-    }
-
-    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-        if let url = webView.url?.absoluteString {
-            print("[NewThread] [POLICY] Navigating to: \(url)")
-
-            // If we're submitting and navigation goes to viewthread, allow it
-            if isSubmitting && url.contains("viewthread") {
-                print("[NewThread] [POLICY] Allowing navigation to thread view")
-            }
-        }
-        decisionHandler(.allow)
-    }
-
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        let url = webView.url?.absoluteString ?? "nil"
-        print("[NewThread] ===== DEBUG: didCommit =====")
-        print("[NewThread] URL: \(url)")
-        print("[NewThread] isSubmitting: \(isSubmitting)")
-        print("[NewThread] =============================")
-
-        if isSubmitting {
-            if url.contains("viewthread") && url.contains("tid=") {
-                print("[NewThread] SUCCESS: Navigated to thread view!")
-                // Don't call handleSubmitSuccess directly here - let didFinish handle it
-            } else if url.contains("post.php") && url.contains("topicsubmit=yes") {
-                print("[NewThread] Submission in progress...")
-            } else if url.contains("post.php") {
-                print("[NewThread] Still on post page...")
-            } else {
-                print("[NewThread] Navigated to: \(url)")
-            }
-        }
-    }
-
-    func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        print("[NewThread] [AUTH] Received authentication challenge")
-        completionHandler(.performDefaultHandling, nil)
+            completion(.failure(NSError(domain: "UploadError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to parse upload response"])))
+        }.resume()
     }
 }
 
 // MARK: - PHPickerViewControllerDelegate
 
 extension NewThreadViewController: PHPickerViewControllerDelegate {
-
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)
-
         for result in results {
-            result.itemProvider.loadObject(ofClass: UIImage.self) { [weak self] object, error in
+            result.itemProvider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
                 if let image = object as? UIImage {
                     DispatchQueue.main.async {
                         self?.selectedImages.append(image)
@@ -1402,30 +817,19 @@ extension NewThreadViewController: PHPickerViewControllerDelegate {
             }
         }
     }
-
-    private func updateAttachmentUI() {
-        attachmentCollectionView.isHidden = selectedImages.isEmpty
-        attachmentCollectionView.reloadData()
-
-        if selectedImages.count >= 5 {
-            attachmentButton.isEnabled = false
-            attachmentButton.setTitle("已达上限", for: .normal)
-        }
-    }
 }
 
-// MARK: - UICollectionViewDataSource & Delegate
+// MARK: - UICollectionViewDelegate & DataSource
 
-extension NewThreadViewController: UICollectionViewDataSource, UICollectionViewDelegate {
-
+extension NewThreadViewController: UICollectionViewDelegate, UICollectionViewDataSource {
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         return selectedImages.count
     }
 
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "AttachmentCell", for: indexPath) as! AttachmentCell
-        cell.configure(with: selectedImages[indexPath.item])
-        cell.onDelete = { [weak self] in
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "ImageCell", for: indexPath) as! NewThreadImageCell
+        cell.image = selectedImages[indexPath.item]
+        cell.deleteCallback = { [weak self] in
             self?.selectedImages.remove(at: indexPath.item)
             self?.updateAttachmentUI()
         }
@@ -1433,55 +837,52 @@ extension NewThreadViewController: UICollectionViewDataSource, UICollectionViewD
     }
 }
 
-// MARK: - AttachmentCell
+// MARK: - NewThreadImageCell
 
-class AttachmentCell: UICollectionViewCell {
-
-    var onDelete: (() -> Void)?
-
-    private let imageView = UIImageView()
-    private let deleteButton = UIButton(type: .system)
+class NewThreadImageCell: UICollectionViewCell {
+    let imageView = UIImageView()
+    let deleteButton = UIButton(type: .system)
+    var deleteCallback: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-
-        imageView.contentMode = .scaleAspectFill
-        imageView.clipsToBounds = true
-        imageView.layer.cornerRadius = 8
-        contentView.addSubview(imageView)
-
-        deleteButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
-        deleteButton.tintColor = .white
-        deleteButton.backgroundColor = UIColor.black.withAlphaComponent(0.5)
-        deleteButton.layer.cornerRadius = 12
-        deleteButton.addTarget(self, action: #selector(deleteTapped), for: .touchUpInside)
-        contentView.addSubview(deleteButton)
-
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        deleteButton.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            imageView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            imageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-
-            deleteButton.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
-            deleteButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -4),
-            deleteButton.widthAnchor.constraint(equalToConstant: 24),
-            deleteButton.heightAnchor.constraint(equalToConstant: 24)
-        ])
+        setupUI()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(with image: UIImage) {
-        imageView.image = image
+    var image: UIImage? {
+        didSet { imageView.image = image }
     }
 
-    @objc private func deleteTapped() {
-        onDelete?()
+    private func setupUI() {
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        imageView.layer.cornerRadius = 8
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(imageView)
+
+        deleteButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
+        deleteButton.tintColor = .white
+        deleteButton.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        deleteButton.layer.cornerRadius = 12
+        deleteButton.translatesAutoresizingMaskIntoConstraints = false
+        deleteButton.addTarget(self, action: #selector(deleteTapped), for: .touchUpInside)
+        contentView.addSubview(deleteButton)
+
+        NSLayoutConstraint.activate([
+            imageView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            imageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            deleteButton.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            deleteButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -4),
+            deleteButton.widthAnchor.constraint(equalToConstant: 24),
+            deleteButton.heightAnchor.constraint(equalToConstant: 24),
+        ])
     }
+
+    @objc private func deleteTapped() { deleteCallback?() }
 }

@@ -22,7 +22,7 @@ class SearchViewController: UIViewController {
 
     private func setupUI() {
         title = "搜索"
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
 
         setupSearchBar()
         setupTableView()
@@ -35,12 +35,12 @@ class SearchViewController: UIViewController {
         searchBar.searchBarStyle = .minimal
         searchBar.delegate = self
         searchBar.tintColor = Theme.primary
-        searchBar.barTintColor = Theme.background
+        searchBar.barTintColor = Theme.currentBackground
         view.addSubview(searchBar)
 
         if let textField = searchBar.value(forKey: "searchField") as? UITextField {
-            textField.textColor = Theme.foreground
-            textField.backgroundColor = Theme.card
+            textField.textColor = Theme.currentForeground
+            textField.backgroundColor = Theme.currentCard
         }
 
         searchBar.translatesAutoresizingMaskIntoConstraints = false
@@ -71,7 +71,7 @@ class SearchViewController: UIViewController {
     private func setupEmptyLabel() {
         emptyLabel.text = "输入关键词搜索帖子"
         emptyLabel.font = .systemFont(ofSize: 16)
-        emptyLabel.textColor = Theme.secondaryText
+        emptyLabel.textColor = Theme.currentSecondaryText
         emptyLabel.textAlignment = .center
         emptyLabel.isHidden = false
         view.addSubview(emptyLabel)
@@ -312,12 +312,12 @@ class SearchResultCell: UITableViewCell {
         backgroundColor = .clear
         selectionStyle = .none
 
-        containerView.backgroundColor = Theme.card
+        containerView.backgroundColor = Theme.currentCard
         containerView.layer.cornerRadius = 12
         contentView.addSubview(containerView)
 
         titleLabel.font = .systemFont(ofSize: 15, weight: .medium)
-        titleLabel.textColor = Theme.titleText
+        titleLabel.textColor = Theme.currentForeground
         titleLabel.numberOfLines = 2
         containerView.addSubview(titleLabel)
 
@@ -326,15 +326,15 @@ class SearchResultCell: UITableViewCell {
         containerView.addSubview(forumLabel)
 
         authorLabel.font = .systemFont(ofSize: 12)
-        authorLabel.textColor = Theme.secondaryText
+        authorLabel.textColor = Theme.currentSecondaryText
         containerView.addSubview(authorLabel)
 
         statsLabel.font = .systemFont(ofSize: 11)
-        statsLabel.textColor = Theme.secondaryText
+        statsLabel.textColor = Theme.currentSecondaryText
         containerView.addSubview(statsLabel)
 
         lastPostLabel.font = .systemFont(ofSize: 11)
-        lastPostLabel.textColor = Theme.secondaryText
+        lastPostLabel.textColor = Theme.currentSecondaryText
         lastPostLabel.textAlignment = .right
         containerView.addSubview(lastPostLabel)
 

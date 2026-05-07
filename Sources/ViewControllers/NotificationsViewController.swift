@@ -26,7 +26,7 @@ class NotificationsViewController: UIViewController {
 
     private func setupUI() {
         title = "消息"
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
 
         setupTableView()
         setupEmptyState()
@@ -55,13 +55,13 @@ class NotificationsViewController: UIViewController {
         view.addSubview(emptyView)
 
         emptyIconView.image = UIImage(systemName: "bell.slash")
-        emptyIconView.tintColor = Theme.secondaryText
+        emptyIconView.tintColor = Theme.currentSecondaryText
         emptyIconView.contentMode = .scaleAspectFit
         emptyView.addSubview(emptyIconView)
 
         emptyLabel.text = "暂无新消息"
         emptyLabel.font = .systemFont(ofSize: 16)
-        emptyLabel.textColor = Theme.secondaryText
+        emptyLabel.textColor = Theme.currentSecondaryText
         emptyLabel.textAlignment = .center
         emptyView.addSubview(emptyLabel)
 
@@ -266,33 +266,33 @@ class PMCell: UITableViewCell {
         backgroundColor = .clear
         selectionStyle = .none
 
-        containerView.backgroundColor = Theme.card
+        containerView.backgroundColor = Theme.currentCard
         containerView.layer.cornerRadius = 12
         contentView.addSubview(containerView)
 
-        avatarImageView.backgroundColor = Theme.muted
+        avatarImageView.backgroundColor = Theme.currentMuted
         avatarImageView.contentMode = .scaleAspectFill
         avatarImageView.layer.cornerRadius = 24
         avatarImageView.clipsToBounds = true
-        avatarImageView.tintColor = Theme.secondaryText
+        avatarImageView.tintColor = Theme.currentSecondaryText
         containerView.addSubview(avatarImageView)
 
         usernameLabel.font = .systemFont(ofSize: 15, weight: .semibold)
-        usernameLabel.textColor = Theme.titleText
+        usernameLabel.textColor = Theme.currentForeground
         containerView.addSubview(usernameLabel)
 
         dateLabel.font = .systemFont(ofSize: 12)
-        dateLabel.textColor = Theme.secondaryText
+        dateLabel.textColor = Theme.currentSecondaryText
         dateLabel.textAlignment = .right
         containerView.addSubview(dateLabel)
 
         subjectLabel.font = .systemFont(ofSize: 14, weight: .medium)
-        subjectLabel.textColor = Theme.titleText
+        subjectLabel.textColor = Theme.currentForeground
         subjectLabel.numberOfLines = 1
         containerView.addSubview(subjectLabel)
 
         summaryLabel.font = .systemFont(ofSize: 12)
-        summaryLabel.textColor = Theme.secondaryText
+        summaryLabel.textColor = Theme.currentSecondaryText
         summaryLabel.numberOfLines = 2
         containerView.addSubview(summaryLabel)
 

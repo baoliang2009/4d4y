@@ -9,18 +9,27 @@ class MainTabBarController: UITabBarController {
     }
 
     private func setupAppearance() {
-        // Tab bar appearance
+        // Tab bar appearance with glass effect
         let appearance = UITabBarAppearance()
         appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = Theme.card
+        appearance.backgroundColor = Theme.currentCard.withAlphaComponent(0.98)
 
-        // Normal state
-        appearance.stackedLayoutAppearance.normal.iconColor = Theme.secondaryText
-        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: Theme.secondaryText]
+        // Add blur effect for depth
+        appearance.backgroundEffect = UIBlurEffect(style: .systemMaterialDark)
 
-        // Selected state
+        // Normal state - subtle and refined
+        appearance.stackedLayoutAppearance.normal.iconColor = Theme.currentSecondaryText
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+            .foregroundColor: Theme.currentSecondaryText,
+            .font: UIFont.systemFont(ofSize: 11, weight: .medium)
+        ]
+
+        // Selected state - vibrant and prominent
         appearance.stackedLayoutAppearance.selected.iconColor = Theme.primary
-        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [.foregroundColor: Theme.primary]
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+            .foregroundColor: Theme.primary,
+            .font: UIFont.systemFont(ofSize: 11, weight: .semibold)
+        ]
 
         tabBar.standardAppearance = appearance
         if #available(iOS 15.0, *) {
@@ -28,9 +37,9 @@ class MainTabBarController: UITabBarController {
         }
         tabBar.tintColor = Theme.primary
 
-        // Add top border
+        // Add subtle top border with gradient effect
         tabBar.layer.borderWidth = 0.5
-        tabBar.layer.borderColor = Theme.border.cgColor
+        tabBar.layer.borderColor = Theme.currentBorder.cgColor
     }
 
     private func setupViewControllers() {
@@ -49,8 +58,8 @@ class MainTabBarController: UITabBarController {
         let searchNav = UINavigationController(rootViewController: searchVC)
         searchNav.tabBarItem = UITabBarItem(
             title: "探索",
-            image: UIImage(systemName: "magnifyingglass"),
-            selectedImage: UIImage(systemName: "magnifyingglass")
+            image: UIImage(systemName: "sparkle.magnifyingglass"),
+            selectedImage: UIImage(systemName: "sparkle.magnifyingglass")
         )
         configureNavigationBar(searchNav)
 
@@ -69,8 +78,8 @@ class MainTabBarController: UITabBarController {
         let profileNav = UINavigationController(rootViewController: profileVC)
         profileNav.tabBarItem = UITabBarItem(
             title: "我的",
-            image: UIImage(systemName: "person"),
-            selectedImage: UIImage(systemName: "person.fill")
+            image: UIImage(systemName: "person.crop.circle"),
+            selectedImage: UIImage(systemName: "person.crop.circle.fill")
         )
         configureNavigationBar(profileNav)
 
@@ -80,14 +89,23 @@ class MainTabBarController: UITabBarController {
     private func configureNavigationBar(_ navController: UINavigationController) {
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = Theme.card
-        appearance.titleTextAttributes = [.foregroundColor: Theme.foreground]
-        appearance.largeTitleTextAttributes = [.foregroundColor: Theme.foreground]
+        appearance.backgroundColor = Theme.currentCard.withAlphaComponent(0.95)
+        appearance.titleTextAttributes = [
+            .foregroundColor: Theme.currentForeground,
+            .font: UIFont.systemFont(ofSize: 17, weight: .semibold)
+        ]
+        appearance.largeTitleTextAttributes = [
+            .foregroundColor: Theme.currentForeground,
+            .font: UIFont.systemFont(ofSize: 34, weight: .bold)
+        ]
         appearance.shadowColor = .clear
 
         navController.navigationBar.standardAppearance = appearance
         navController.navigationBar.scrollEdgeAppearance = appearance
         navController.navigationBar.compactAppearance = appearance
         navController.navigationBar.tintColor = Theme.primary
+
+        // Enable large titles
+        navController.navigationBar.prefersLargeTitles = false
     }
 }

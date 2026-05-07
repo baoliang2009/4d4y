@@ -16,14 +16,14 @@ class ForumListViewController: UIViewController {
 
     private func setupUI() {
         title = "FourD4Y"
-        view.backgroundColor = Theme.background
+        view.backgroundColor = Theme.currentBackground
 
         // Configure navigation bar appearance
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = Theme.card
-        appearance.titleTextAttributes = [.foregroundColor: Theme.foreground]
-        appearance.largeTitleTextAttributes = [.foregroundColor: Theme.foreground]
+        appearance.backgroundColor = Theme.currentCard
+        appearance.titleTextAttributes = [.foregroundColor: Theme.currentForeground]
+        appearance.largeTitleTextAttributes = [.foregroundColor: Theme.currentForeground]
         navigationController?.navigationBar.standardAppearance = appearance
         navigationController?.navigationBar.scrollEdgeAppearance = appearance
 
@@ -31,7 +31,7 @@ class ForumListViewController: UIViewController {
         tableView.dataSource = self
         tableView.register(ForumCell.self, forCellReuseIdentifier: ForumCell.identifier)
         tableView.separatorStyle = .none
-        tableView.backgroundColor = Theme.background
+        tableView.backgroundColor = Theme.currentBackground
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 100
         view.addSubview(tableView)
@@ -67,7 +67,7 @@ class ForumListViewController: UIViewController {
 
         emptyLabel.text = "暂无收藏版块\n点击右上角切换到全部版块"
         emptyLabel.textAlignment = .center
-        emptyLabel.textColor = Theme.secondaryText
+        emptyLabel.textColor = Theme.currentSecondaryText
         emptyLabel.font = .systemFont(ofSize: 15)
         emptyLabel.numberOfLines = 0
         emptyLabel.isHidden = true

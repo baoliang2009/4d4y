@@ -243,15 +243,30 @@ class ForumHTMLParser {
 
     // MARK: - Thread Detail Parsing
 
-    static func parseThreadDetail(_ data: Data) throws -> ThreadDetail {
-        // Try multiple encodings
-        let encodingsToTry: [String.Encoding] = [
-            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000631))),
-            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000630))),
-            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000632))),
+    static func parseThreadDetail(_ data: Data, encodingHint: String.Encoding? = nil) throws -> ThreadDetail {
+        // Build encoding list: hint first, then by likelihood, then fallback
+        var encodingsToTry: [String.Encoding] = []
+
+        // 1. Try cached encoding hint first
+        if let hint = encodingHint {
+            encodingsToTry.append(hint)
+        }
+
+        // 2. Add encodings by likelihood for Discuz 7.2
+        encodingsToTry.append(contentsOf: [
+            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000631))), // GB18030
             .utf8,
+            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000630))), // GB2312
+            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000632))), // GBK
             .windowsCP1252
-        ]
+        ])
+
+        // 3. Remove duplicates while preserving order
+        encodingsToTry = encodingsToTry.reduce(into: [String.Encoding]()) { result, encoding in
+            if !result.contains(where: { CFStringConvertEncodingToNSStringEncoding($0) == CFStringConvertEncodingToNSStringEncoding(encoding) }) {
+                result.append(encoding)
+            }
+        }
 
         var html: String?
         for encoding in encodingsToTry {
@@ -264,6 +279,9 @@ class ForumHTMLParser {
         guard let decodedHTML = html else {
             throw NetworkError.parsingFailed("Failed to decode HTML")
         }
+
+        // Save successful encoding hint
+        CacheManager.shared.saveEncodingHint(forPattern: "viewthread", encoding: "\(encoding)")
 
         let doc = try SwiftSoup.parse(decodedHTML)
 
@@ -331,6 +349,42 @@ class ForumHTMLParser {
             totalPages: totalPages,
             currentPage: currentPage
         )
+    }
+
+    /// Minimal parse - extracts only pagination info, not full post content
+    static func parseThreadDetailMinimal(_ data: Data) -> (currentPage: Int, totalPages: Int, postCount: Int)? {
+        let encodingsToTry: [String.Encoding] = [
+            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000631))),
+            .utf8,
+            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000630))),
+            String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000632))),
+            .windowsCP1252
+        ]
+
+        var html: String?
+        for encoding in encodingsToTry {
+            if let decoded = String(data: data, encoding: encoding) {
+                html = decoded
+                break
+            }
+        }
+
+        guard let decodedHTML = html else { return nil }
+
+        // Extract pagination from .pg or .pagination text
+        let doc = try? SwiftSoup.parse(decodedHTML)
+        guard let paginationElement = try? doc?.select(".pg, .pagination").first() else { return nil }
+
+        let paginationText = try? paginationElement.text()
+        guard let text = paginationText else { return nil }
+
+        let (currentPage, totalPages) = extractPageInfo(from: text)
+
+        // Count posts quickly
+        let postDivs = try? doc?.select("div[id^='post_']")
+        let postCount = postDivs?.count() ?? 0
+
+        return (currentPage, totalPages, postCount)
     }
 
     private static func parsePostDiv(_ postDiv: Element, floorNumber: Int) throws -> ForumPost? {

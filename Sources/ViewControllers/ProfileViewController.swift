@@ -378,16 +378,28 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
         menuStackView.clipsToBounds = true
         contentView.addSubview(menuStackView)
 
-        let menuItems = [
+        // First three menu items are static
+        let staticMenuItems = [
             ("bookmark", "我的收藏"),
             ("clock.arrow.circlepath", "浏览历史"),
             ("gear", "设置")
         ]
 
-        for (icon, title) in menuItems {
+        for (icon, title) in staticMenuItems {
             let menuItem = createMenuItem(icon: icon, title: title)
             menuStackView.addArrangedSubview(menuItem)
         }
+
+        // Theme menu item with detail and tap handler
+        let themeMenuItem = createMenuItem(
+            icon: "paintbrush",
+            title: "主题",
+            detail: ThemeManager.shared.currentTheme.displayName,
+            tapHandler: { [weak self] in
+                self?.showThemePicker()
+            }
+        )
+        menuStackView.addArrangedSubview(themeMenuItem)
 
         menuStackView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -398,7 +410,7 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
         ])
     }
 
-    private func createMenuItem(icon: String, title: String) -> UIView {
+    private func createMenuItem(icon: String, title: String, detail: String? = nil, tapHandler: (() -> Void)? = nil) -> UIView {
         let container = UIView()
         container.backgroundColor = Theme.currentCard
 
@@ -413,6 +425,13 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
         titleLabel.textColor = Theme.currentForeground
         container.addSubview(titleLabel)
 
+        let detailLabel = UILabel()
+        detailLabel.text = detail
+        detailLabel.font = .systemFont(ofSize: 14)
+        detailLabel.textColor = Theme.currentSecondaryText
+        detailLabel.textAlignment = .right
+        container.addSubview(detailLabel)
+
         let arrow = UIImageView(image: UIImage(systemName: "chevron.right"))
         arrow.tintColor = Theme.currentSecondaryText
         arrow.contentMode = .scaleAspectFit
@@ -420,6 +439,7 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
 
         iconView.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
         arrow.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
@@ -436,10 +456,32 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
             arrow.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
             arrow.centerYAnchor.constraint(equalTo: container.centerYAnchor),
             arrow.widthAnchor.constraint(equalToConstant: 16),
-            arrow.heightAnchor.constraint(equalToConstant: 16)
+            arrow.heightAnchor.constraint(equalToConstant: 16),
+
+            detailLabel.trailingAnchor.constraint(equalTo: arrow.leadingAnchor, constant: -8),
+            detailLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor)
         ])
 
+        if let tapHandler = tapHandler {
+            container.isUserInteractionEnabled = true
+            let tapGesture = UITapGestureRecognizer(target: self, action: #selector(menuItemTapped(_:)))
+            container.addGestureRecognizer(tapGesture)
+            container.tag = tapHandler.hashValue
+            objc_setAssociatedObject(container, &AssociatedKeys.menuHandler, tapHandler, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+
         return container
+    }
+
+    private struct AssociatedKeys {
+        static var menuHandler = "menuHandler"
+    }
+
+    @objc private func menuItemTapped(_ gesture: UITapGestureRecognizer) {
+        guard let view = gesture.view, let handler = objc_getAssociatedObject(view, &AssociatedKeys.menuHandler) as? () -> Void else {
+            return
+        }
+        handler()
     }
 
     private func setupActionButtons() {
@@ -872,6 +914,43 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
     func loginViewControllerDidCancel(_ controller: LoginViewController) {
         print("[Profile] Login cancelled")
         controller.dismiss(animated: true)
+    }
+
+    private func showThemePicker() {
+        let alert = UIAlertController(title: "选择主题", message: nil, preferredStyle: .actionSheet)
+
+        for theme in [ThemeType.light, ThemeType.dark] {
+            let action = UIAlertAction(title: theme.displayName, style: .default) { [weak self] _ in
+                ThemeManager.shared.currentTheme = theme
+                self?.rebuildThemeMenuItem()
+            }
+            if theme == ThemeManager.shared.currentTheme {
+                action.setValue(true, forKey: "checked")
+            }
+            alert.addAction(action)
+        }
+
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func rebuildThemeMenuItem() {
+        // Find and remove the old theme menu item (last item)
+        if let lastItem = menuStackView.arrangedSubviews.last {
+            menuStackView.removeArrangedSubview(lastItem)
+            lastItem.removeFromSuperview()
+        }
+
+        // Add new theme menu item with updated detail
+        let themeMenuItem = createMenuItem(
+            icon: "paintbrush",
+            title: "主题",
+            detail: ThemeManager.shared.currentTheme.displayName,
+            tapHandler: { [weak self] in
+                self?.showThemePicker()
+            }
+        )
+        menuStackView.addArrangedSubview(themeMenuItem)
     }
 
     @objc private func logoutTapped() {

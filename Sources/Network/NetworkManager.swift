@@ -323,15 +323,20 @@ class NetworkManager {
         let cacheKey = CacheManager.CacheKeys.threadDetail(tid: tid, page: page)
 
         // Try cache first for page 1 (main content)
-        if useCache, page == 1, let cachedDetail: ThreadDetail = CacheManager.shared.load(ThreadDetail.self, forKey: cacheKey) {
-            print("[ThreadDetail] Using cache for tid=\(tid), age: \(CacheManager.shared.getCacheAge(forKey: cacheKey) ?? "unknown")")
-            // Refresh in background
-            Task {
-                if let freshDetail = try? await self.fetchThreadDetailWithoutCache(tid: tid, page: page) {
-                    CacheManager.shared.save(freshDetail, forKey: cacheKey)
+        if useCache, page == 1 {
+            let (cachedDetail, isStale, _) = CacheManager.shared.loadWithFreshness(ThreadDetail.self, forKey: cacheKey)
+            if let cached = cachedDetail {
+                print("[ThreadDetail] Using cache for tid=\(tid)")
+                // Refresh in background if stale
+                if isStale {
+                    Task {
+                        if let freshDetail = try? await self.fetchThreadDetailWithoutCache(tid: tid, page: page) {
+                            CacheManager.shared.save(freshDetail, forKey: cacheKey)
+                        }
+                    }
                 }
+                return cached
             }
-            return cachedDetail
         }
 
         let detail = try await fetchThreadDetailWithoutCache(tid: tid, page: page)
@@ -339,9 +344,20 @@ class NetworkManager {
         return detail
     }
 
-    private func fetchThreadDetailWithoutCache(tid: Int, page: Int = 1) async throws -> ThreadDetail {
+    // MARK: - Prefetch Methods (low priority)
+
+    func prefetchThreadDetail(tid: Int, page: Int) async throws -> ThreadDetail {
+        // Use background URLSession configuration for prefetch
+        let detail = try await fetchThreadDetailWithoutCache(tid: tid, page: page)
+        // Cache for later use
+        let cacheKey = CacheManager.CacheKeys.threadDetail(tid: tid, page: page)
+        CacheManager.shared.save(detail, forKey: cacheKey)
+        return detail
+    }
+
+    func fetchThreadDetailWithoutCache(tid: Int, page: Int = 1) async throws -> ThreadDetail {
         let pageString = page > 1 ? "&page=\(page)" : ""
-        let urlString = "https://www.4d4y.com/forum/viewthread.php?tid=\(tid)&highlight=\(pageString)"
+        let urlString = "https://www.4d4y.com/forum/viewthread.php?tid=\(tid)\(pageString)"
 
         guard let url = URL(string: urlString) else {
             throw NetworkError.invalidURL

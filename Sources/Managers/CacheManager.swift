@@ -72,6 +72,73 @@ class CacheManager {
         return Date().timeIntervalSince1970 - timestamp > cacheExpiration
     }
 
+    // MARK: - CacheEntry for stale-while-revalidate
+
+    struct CacheEntry<T: Codable>: Codable {
+        let data: T
+        let timestamp: TimeInterval
+        let encodingHint: String?
+
+        var date: Date { Date(timeIntervalSince1970: timestamp) }
+
+        var isStale: Bool {
+            Date().timeIntervalSince1970 - timestamp > 5 * 60
+        }
+
+        var isExpired: Bool {
+            Date().timeIntervalSince1970 - timestamp > 30 * 60
+        }
+    }
+
+    // MARK: - Load with freshness
+
+    func loadWithFreshness<T: Decodable>(_ type: T.Type, forKey key: String) -> (data: T?, isStale: Bool, isExpired: Bool) {
+        let fileURL = cacheFileURL(for: key)
+
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return (nil, false, true)
+        }
+
+        guard !isExpired(forKey: key) else {
+            return (nil, false, true)
+        }
+
+        let isStale = isExpired(forKey: key) == false && Date().timeIntervalSince1970 - (loadMetadata(forKey: key)?["timestamp"] as? TimeInterval ?? 0) > 5 * 60
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            let object = try JSONDecoder().decode(type, from: data)
+            return (object, isStale, false)
+        } catch {
+            return (nil, false, true)
+        }
+    }
+
+    // MARK: - Encoding hints
+
+    func saveEncodingHint(forPattern pattern: String, encoding: String) {
+        let key = "encoding_hint_\(pattern)"
+        UserDefaults.standard.set(encoding, forKey: key)
+    }
+
+    func getEncodingHint(forPattern pattern: String) -> String.Encoding? {
+        let key = "encoding_hint_\(pattern)"
+        guard let encodingName = UserDefaults.standard.string(forKey: key) else { return nil }
+
+        switch encodingName {
+        case "GB18030":
+            return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000631)))
+        case "GB2312":
+            return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000630)))
+        case "GBK":
+            return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(0x80000632)))
+        case "UTF-8":
+            return .utf8
+        default:
+            return nil
+        }
+    }
+
     func getCacheAge(forKey key: String) -> String? {
         guard let metadata = loadMetadata(forKey: key),
               let timestamp = metadata["timestamp"] as? TimeInterval else {

@@ -9,6 +9,8 @@ class ThreadDetailViewController: UIViewController {
     private var totalPages = 1
     private var isLoading = false
     private var formhash: String?
+    private var paginationPrefetcher: PaginationPrefetcher?
+    private var lastScrollPercentage: CGFloat = 0
 
     init(thread: ForumThread) {
         self.thread = thread
@@ -24,6 +26,10 @@ class ThreadDetailViewController: UIViewController {
         setupUI()
         loadThreadDetail()
         loadFormhash()
+
+        // Initialize pagination prefetcher
+        paginationPrefetcher = PaginationPrefetcher(tid: thread.tid)
+        ImagePrefetchManager.shared.prefetchImages(for: thread.tid, imageURLs: [])
 
         // Mark thread as read
         ReadTracker.shared.markAsRead(tid: thread.tid)
@@ -97,6 +103,13 @@ class ThreadDetailViewController: UIViewController {
                     self.totalPages = detail.totalPages
                     self.title = detail.title.isEmpty ? self.thread.displayTitle : detail.title
                     self.tableView.reloadData()
+
+                    // Start prefetching next pages
+                    self.paginationPrefetcher?.prefetchNextPages(currentPage: self.currentPage, totalPages: self.totalPages)
+
+                    // Prefetch images for current page
+                    let allImages = detail.posts.flatMap { $0.images }
+                    ImagePrefetchManager.shared.prefetchImages(for: self.thread.tid, imageURLs: allImages)
                 }
             } catch {
                 await MainActor.run {
@@ -199,6 +212,14 @@ class ThreadDetailViewController: UIViewController {
     }
 }
 
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        if isMovingFromParent {
+            paginationPrefetcher?.clear()
+            ImagePrefetchManager.shared.cancelPrefetch(for: thread.tid)
+        }
+    }
+
 extension ThreadDetailViewController: UITableViewDataSource, UITableViewDelegate {
 
     func numberOfSections(in tableView: UITableView) -> Int {
@@ -233,10 +254,36 @@ extension ThreadDetailViewController: UITableViewDataSource, UITableViewDelegate
         let contentHeight = scrollView.contentSize.height
         let height = scrollView.frame.size.height
 
+        // Calculate scroll percentage
+        let scrollPercentage = contentHeight > 0 ? offsetY / (contentHeight - height) : 0
+
+        // Check if prefetch callback exists for next page
         if offsetY > contentHeight - height - 100 && !isLoading && currentPage < totalPages {
-            currentPage += 1
-            loadThreadDetail()
+            let nextPage = currentPage + 1
+
+            // Check if we already have this page prefetched
+            if let prefetched = paginationPrefetcher?.getPrefetchedPage(nextPage) {
+                // Use prefetched data
+                currentPage += 1
+                posts.append(contentsOf: prefetched.posts)
+                tableView.reloadData()
+            } else {
+                // Fetch normally
+                currentPage += 1
+                loadThreadDetail()
+            }
         }
+
+        // Trigger prefetch at scroll milestones
+        if scrollPercentage > 0.5 && lastScrollPercentage <= 0.5 {
+            // Crossed 50% threshold
+            paginationPrefetcher?.prefetchPage(currentPage + 1)
+        } else if scrollPercentage > 0.75 && lastScrollPercentage <= 0.75 {
+            // Crossed 75% threshold
+            paginationPrefetcher?.prefetchPage(currentPage + 2)
+        }
+
+        lastScrollPercentage = scrollPercentage
     }
 }
 

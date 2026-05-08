@@ -36,6 +36,11 @@ class AccountManager {
         } else if let first = accounts.first {
             currentAccountId = first.id
         }
+
+        // Restore cookies for current account if exists
+        if let currentId = currentAccountId {
+            loadCookies(for: currentId)
+        }
     }
 
     func saveAccounts() {

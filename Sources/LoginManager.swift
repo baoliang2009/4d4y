@@ -53,7 +53,7 @@ class LoginManager {
         set { UserDefaults.standard.set(newValue, forKey: isLoggedInKey) }
     }
 
-    private var loginDate: Date? {
+    var loginDate: Date? {
         get { UserDefaults.standard.object(forKey: loginDateKey) as? Date }
         set { UserDefaults.standard.set(newValue, forKey: loginDateKey) }
     }
@@ -96,13 +96,18 @@ class LoginManager {
         guard let cookies = HTTPCookieStorage.shared.cookies else { return }
 
         let cookieData = cookies.map { cookie in
-            [
+            var dict: [String: Any] = [
                 "name": cookie.name,
                 "value": cookie.value,
                 "domain": cookie.domain,
                 "path": cookie.path,
                 "secure": cookie.isSecure
-            ] as [String: Any]
+            ]
+            // 关键：保存过期时间，否则 Cookie 可能被浏览器丢弃
+            if let expiresDate = cookie.expiresDate {
+                dict["expiresDate"] = expiresDate.timeIntervalSince1970
+            }
+            return dict
         }
 
         UserDefaults.standard.set(cookieData, forKey: cookiesKey)
@@ -125,13 +130,17 @@ class LoginManager {
                 continue
             }
 
-            let properties: [HTTPCookiePropertyKey: Any] = [
+            var properties: [HTTPCookiePropertyKey: Any] = [
                 .name: name,
                 .value: value,
                 .domain: domain,
                 .path: path,
                 .secure: data["secure"] as? Bool ?? false
             ]
+            // 恢复过期时间
+            if let expiresInterval = data["expiresDate"] as? TimeInterval {
+                properties[.expires] = Date(timeIntervalSince1970: expiresInterval)
+            }
 
             if let cookie = HTTPCookie(properties: properties) {
                 storage.setCookie(cookie)
@@ -290,12 +299,25 @@ class LoginManager {
             return false
         }
 
-        return try await NetworkManager.shared.login(
+        let success = try await NetworkManager.shared.login(
             username: username,
             password: password,
             questionId: questionId,
             answer: answer ?? ""
         )
+
+        // After successful login, if this is the first account, add to AccountManager
+        if success && AccountManager.shared.accounts.isEmpty {
+            _ = try? AccountManager.shared.addAccount(
+                username: username,
+                password: password,
+                questionId: questionId,
+                answer: answer ?? "",
+                uid: uid
+            )
+        }
+
+        return success
     }
 }
 

@@ -20,6 +20,8 @@ class HomeViewController: UIViewController {
     private var hotThreads: [ForumThread] = []
     private var isEditMode = false
 
+    private let fabButton = UIButton(type: .system)
+
     // UserDefaults keys
     private let forumOrderKey = "forumOrder"
     private let followedForumsKey = "followedForums"
@@ -41,6 +43,7 @@ class HomeViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
+        setupFAB()
         loadData()
     }
 
@@ -203,6 +206,33 @@ class HomeViewController: UIViewController {
         let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
         longPress.minimumPressDuration = 0.5
         forumsCollectionView.addGestureRecognizer(longPress)
+    }
+
+    private func setupFAB() {
+        fabButton.setImage(UIImage(systemName: "person.2.circle.fill"), for: .normal)
+        fabButton.tintColor = Theme.primary
+        fabButton.backgroundColor = Theme.currentCard
+        fabButton.layer.cornerRadius = 28
+        fabButton.layer.shadowColor = UIColor.black.cgColor
+        fabButton.layer.shadowOffset = CGSize(width: 0, height: 2)
+        fabButton.layer.shadowRadius = 4
+        fabButton.layer.shadowOpacity = 0.2
+        fabButton.addTarget(self, action: #selector(fabTapped), for: .touchUpInside)
+        view.addSubview(fabButton)
+
+        fabButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            fabButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            fabButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+            fabButton.widthAnchor.constraint(equalToConstant: 56),
+            fabButton.heightAnchor.constraint(equalToConstant: 56)
+        ])
+    }
+
+    @objc private func fabTapped() {
+        let accountSwitcherVC = AccountSwitcherViewController()
+        accountSwitcherVC.modalPresentationStyle = .pageSheet
+        present(accountSwitcherVC, animated: true)
     }
 
     @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {

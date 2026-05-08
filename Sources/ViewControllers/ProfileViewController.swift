@@ -390,6 +390,16 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
             menuStackView.addArrangedSubview(menuItem)
         }
 
+        // Switch account menu item
+        let switchAccountMenuItem = createMenuItem(
+            icon: "person.2",
+            title: "切换账号",
+            tapHandler: { [weak self] in
+                self?.switchAccountTapped()
+            }
+        )
+        menuStackView.addArrangedSubview(switchAccountMenuItem)
+
         // Theme menu item with detail and tap handler
         let themeMenuItem = createMenuItem(
             icon: "paintbrush",
@@ -466,7 +476,6 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
             container.isUserInteractionEnabled = true
             let tapGesture = UITapGestureRecognizer(target: self, action: #selector(menuItemTapped(_:)))
             container.addGestureRecognizer(tapGesture)
-            container.tag = tapHandler.hashValue
             objc_setAssociatedObject(container, &AssociatedKeys.menuHandler, tapHandler, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
 
@@ -961,6 +970,12 @@ class ProfileViewController: UIViewController, LoginViewControllerDelegate {
             self?.updateUIForLoggedOut()
         })
         present(alert, animated: true)
+    }
+
+    private func switchAccountTapped() {
+        let accountSwitcherVC = AccountSwitcherViewController()
+        accountSwitcherVC.modalPresentationStyle = .pageSheet
+        present(accountSwitcherVC, animated: true)
     }
 }
 

@@ -39,15 +39,13 @@ class ThemeManager {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = windowScene.windows.first else { return }
 
-        switch currentTheme {
-        case .light:
-            Theme.applyLightMode(to: window)
-        case .dark:
-            Theme.applyDarkMode(to: window)
+        if #available(iOS 15.0, *) {
+            switch currentTheme {
+            case .light:
+                Theme.applyLightMode(to: window)
+            case .dark:
+                Theme.applyDarkMode(to: window)
+            }
         }
     }
-}
-
-extension Notification.Name {
-    static let themeDidChange = Notification.Name("themeDidChange")
 }

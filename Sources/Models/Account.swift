@@ -18,7 +18,7 @@ struct Account: Codable, Identifiable {
     }
 }
 
-struct AccountCredentials {
+struct AccountCredentials: Codable {
     let accountId: UUID
     let username: String
     let password: String

@@ -152,7 +152,7 @@ class AccountManager {
         }
 
         // Deserialize cookies from data
-        guard let cookies = try? NSKeyedUnarchiver.unarchivedArrayOfObjects(ofClass: HTTPCookie.self, from: data) else {
+        guard let cookies = NSKeyedUnarchiver.unarchiveObject(with: data) as? [HTTPCookie] else {
             return []
         }
         return cookies

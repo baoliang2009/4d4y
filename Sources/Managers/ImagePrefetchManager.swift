@@ -5,11 +5,10 @@ import SDWebImage
 class ImagePrefetchManager {
     static let shared = ImagePrefetchManager()
 
-    private var prefetchTokens: [Int: [SDWebImagePrefetchToken]] = [:] // tid -> tokens
+    private var prefetchTokens: [Int: SDWebImagePrefetchToken] = [:] // tid -> token
     private let prefetcher = SDWebImagePrefetcher()
 
     private init() {
-        prefetcher.maxConcurrentPrefetches = 4
     }
 
     /// Prefetch images for a specific tid
@@ -20,22 +19,20 @@ class ImagePrefetchManager {
         cancelPrefetch(for: tid)
 
         let token = prefetcher.prefetchURLs(urls)
-        prefetchTokens[tid] = [token]
+        prefetchTokens[tid] = token
     }
 
     /// Cancel prefetch for a thread
     func cancelPrefetch(for tid: Int) {
-        if let tokens = prefetchTokens[tid] {
-            tokens.forEach { $0.cancel() }
+        if let token = prefetchTokens[tid] {
+            token.cancel()
             prefetchTokens.removeValue(forKey: tid)
         }
     }
 
     /// Cancel all prefetches
     func cancelAllPrefetches() {
-        prefetchTokens.values.forEach { tokens in
-            tokens.forEach { $0.cancel() }
-        }
+        prefetchTokens.values.forEach { $0.cancel() }
         prefetchTokens.removeAll()
     }
 }

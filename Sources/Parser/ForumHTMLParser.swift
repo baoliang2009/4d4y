@@ -262,16 +262,22 @@ class ForumHTMLParser {
         ])
 
         // 3. Remove duplicates while preserving order
-        encodingsToTry = encodingsToTry.reduce(into: [String.Encoding]()) { result, encoding in
-            if !result.contains(where: { CFStringConvertEncodingToNSStringEncoding($0) == CFStringConvertEncodingToNSStringEncoding(encoding) }) {
-                result.append(encoding)
+        var seen: Set<Int> = []
+        encodingsToTry = encodingsToTry.filter { encoding in
+            let nsEncoding = Int(encoding.rawValue)
+            if seen.contains(nsEncoding) {
+                return false
             }
+            seen.insert(nsEncoding)
+            return true
         }
 
         var html: String?
+        var successfulEncoding: String.Encoding?
         for encoding in encodingsToTry {
             if let decoded = String(data: data, encoding: encoding) {
                 html = decoded
+                successfulEncoding = encoding
                 break
             }
         }
@@ -281,7 +287,9 @@ class ForumHTMLParser {
         }
 
         // Save successful encoding hint
-        CacheManager.shared.saveEncodingHint(forPattern: "viewthread", encoding: "\(encoding)")
+        if let enc = successfulEncoding {
+            CacheManager.shared.saveEncodingHint(forPattern: "viewthread", encoding: "\(enc)")
+        }
 
         let doc = try SwiftSoup.parse(decodedHTML)
 
@@ -305,11 +313,22 @@ class ForumHTMLParser {
         var posts: [ForumPost] = []
 
         // Find all post divs - format is <div id="post_数字">
-        let postDivs = try doc.select("div[id^='post_']")
-        print("[parseThreadDetail] Found \(postDivs.count) post divs with selector div[id^='post_']")
+        // Exclude post_rate_div_* elements which are not actual posts
+        let allPostDivs = try doc.select("div[id^='post_']")
+        print("[parseThreadDetail] Found \(allPostDivs.count) divs with id^='post_'")
+
+        // Filter out post_rate_div_* elements - convert to array first
+        var postDivs: [Element] = []
+        for div in allPostDivs.array() {
+            guard let id = try? div.attr("id") else { continue }
+            if !id.hasPrefix("post_rate_div_") {
+                postDivs.append(div)
+            }
+        }
+        print("[parseThreadDetail] After filtering rate divs: \(postDivs.count) actual posts")
 
         // If no posts found, try alternative selectors
-        if postDivs.isEmpty() {
+        if postDivs.count == 0 {
             print("[parseThreadDetail] Trying alternative selectors...")
 
             // Try table#pid* selector
@@ -328,14 +347,14 @@ class ForumHTMLParser {
         }
 
         // Debug: print first few post div IDs
-        for (index, postDiv) in postDivs.array().enumerated() {
+        for (index, postDiv) in postDivs.enumerated() {
             if index < 3 {
                 let id = try? postDiv.attr("id")
                 print("[parseThreadDetail]   postDiv[\(index)] id: \(id ?? "nil")")
             }
         }
 
-        for (index, postDiv) in postDivs.array().enumerated() {
+        for (index, postDiv) in postDivs.enumerated() {
             if let post = try? parsePostDiv(postDiv, floorNumber: index + 1) {
                 posts.append(post)
             }
@@ -382,7 +401,7 @@ class ForumHTMLParser {
 
         // Count posts quickly
         let postDivs = try? doc?.select("div[id^='post_']")
-        let postCount = postDivs?.count() ?? 0
+        let postCount = postDivs?.count ?? 0
 
         return (currentPage, totalPages, postCount)
     }
@@ -417,9 +436,17 @@ class ForumHTMLParser {
 
         // Extract post date - look for "发表于" pattern in the post
         var postDate = ""
-        if let postinfo = try? postDiv.select(".postinfo, .posterinfo").first() {
+        // Try div.authorinfo em[id^="authorposton"] first (Discuz format)
+        if let postinfo = try? postDiv.select("div.authorinfo em[id^=\"authorposton\"]").first() {
             let text = try postinfo.text()
-            // Look for date pattern like "发表于 2009-1-2 01:17"
+            // Format: "发表于 2026-5-7 22:51"
+            if let range = text.range(of: "发表于\\s+(.+)", options: .regularExpression) {
+                postDate = String(text[range]).replacingOccurrences(of: "发表于", with: "").trimmingCharacters(in: .whitespaces)
+            }
+        }
+        // Fallback: try .postinfo or .posterinfo
+        if postDate.isEmpty, let postinfo = try? postDiv.select(".postinfo, .posterinfo").first() {
+            let text = try postinfo.text()
             if let range = text.range(of: "\\d{4}-\\d{1,2}-\\d{1,2}\\s+\\d{1,2}:\\d{2}", options: .regularExpression) {
                 postDate = String(text[range])
             }
@@ -447,6 +474,9 @@ class ForumHTMLParser {
         }
 
         if let cell = contentCell {
+            // Remove edit status elements before extracting text
+            try? cell.select("i.pstatus, .pstatus").remove()
+
             // Get text content
             content = try cell.text()
             print("[parsePostDiv] Found content: \(content.prefix(50))...")
@@ -461,6 +491,16 @@ class ForumHTMLParser {
                 let zoomfileURL = try img.attr("zoomfile")
                 let srcURL = try img.attr("src")
                 var url = !fileURL.isEmpty ? fileURL : (!zoomfileURL.isEmpty ? zoomfileURL : srcURL)
+
+                // When falling back to src (thumbnail), try to get full-size URL from onclick zoom()
+                if url == srcURL, let onclick = try? img.attr("onclick") {
+                    let zoomPattern = #"zoom\(this,\s*'([^']+)'"#
+                    if let zoomRegex = try? NSRegularExpression(pattern: zoomPattern, options: []),
+                       let zoomMatch = zoomRegex.firstMatch(in: onclick, options: [], range: NSRange(onclick.startIndex..., in: onclick)),
+                       let zoomRange = Range(zoomMatch.range(at: 1), in: onclick) {
+                        url = String(onclick[zoomRange])
+                    }
+                }
 
                 guard !url.isEmpty else { continue }
 

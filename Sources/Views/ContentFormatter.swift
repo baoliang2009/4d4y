@@ -20,8 +20,8 @@ class ContentFormatter {
         var quoteTextColor: UIColor = Theme.currentSecondaryText
         var quoteAuthorColor: UIColor = Theme.primary
         var codeBackground: UIColor = Theme.currentMuted
-        var lineSpacing: CGFloat = 8
-        var paragraphSpacing: CGFloat = 12
+        var lineSpacing: CGFloat = 14
+        var paragraphSpacing: CGFloat = 16
 
         static func current() -> Style {
             return Style(
@@ -32,8 +32,8 @@ class ContentFormatter {
                 quoteTextColor: Theme.currentSecondaryText,
                 quoteAuthorColor: Theme.primary,
                 codeBackground: Theme.currentMuted,
-                lineSpacing: 8,
-                paragraphSpacing: 12
+                lineSpacing: 14,
+                paragraphSpacing: 16
             )
         }
     }
@@ -272,6 +272,7 @@ class ContentFormatter {
             if trimmedLine.isEmpty {
                 let spacer = NSMutableAttributedString(string: " ")
                 let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.lineSpacing = style.lineSpacing
                 paragraphStyle.paragraphSpacing = style.paragraphSpacing / 2
                 spacer.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: 1))
                 result.append(spacer)
@@ -363,6 +364,12 @@ class ContentFormatter {
         if result.length == 0 {
             return formatBBCode(line, font: style.font, color: style.textColor)
         }
+
+        // Apply line spacing to the entire result
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = style.lineSpacing
+        paragraphStyle.maximumLineHeight = style.font.lineHeight + style.lineSpacing
+        result.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: result.length))
 
         return result
     }

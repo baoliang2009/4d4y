@@ -85,8 +85,6 @@ class NotificationCell: UITableViewCell {
         unreadDot.isHidden = item.isRead
 
         let formatter = RelativeDateTimeFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
         dateLabel.text = formatter.localizedString(for: item.date, relativeTo: Date())
 
         switch item.type {

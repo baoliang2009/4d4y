@@ -95,9 +95,25 @@ class ThreadDetailViewController: UIViewController {
                     self.refreshControl?.endRefreshing()
 
                     if self.currentPage == 1 {
-                        self.posts = detail.posts
+                        // Deduplicate posts by pid to prevent duplicates on first load
+                        var seenPids = Set<Int>()
+                        var uniquePosts: [ForumPost] = []
+                        for post in detail.posts {
+                            if !seenPids.contains(post.pid) {
+                                seenPids.insert(post.pid)
+                                uniquePosts.append(post)
+                            }
+                        }
+                        self.posts = uniquePosts
                     } else {
-                        self.posts.append(contentsOf: detail.posts)
+                        // Deduplicate when appending to prevent duplicates from prefetch
+                        var existingPids = Set(self.posts.map { $0.pid })
+                        for post in detail.posts {
+                            if !existingPids.contains(post.pid) {
+                                existingPids.insert(post.pid)
+                                self.posts.append(post)
+                            }
+                        }
                     }
 
                     self.totalPages = detail.totalPages

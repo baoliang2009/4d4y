@@ -239,3 +239,8 @@ enum Theme {
         UIView.animate(withDuration: duration, delay: 0, usingSpringWithDamping: damping, initialSpringVelocity: velocity, options: [.curveEaseOut], animations: animations, completion: completion)
     }
 }
+
+// MARK: - Notification Names
+extension Notification.Name {
+    static let themeDidChange = Notification.Name("themeDidChange")
+}

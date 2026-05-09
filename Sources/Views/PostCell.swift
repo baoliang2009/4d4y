@@ -379,6 +379,8 @@ class PostCell: UITableViewCell {
         imagesContainerTopConstraint = nil
         replyButtonTopConstraint?.isActive = false
         replyButtonTopConstraint = nil
+        // statsContainerHeightConstraint 保留（在 setupConstraints 中持久存在），恢复默认值
+        statsContainerHeightConstraint?.constant = 28
         // 重置隐藏状态
         statsContainer.isHidden = false
         replyButton.isHidden = false

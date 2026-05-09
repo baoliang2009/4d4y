@@ -314,55 +314,36 @@ class PostCell: UITableViewCell {
 
         let hasImages = !post.images.isEmpty
 
-        // 回复按钮始终显示，在最底部单独一行
+        // 回复按钮始终显示
         replyButton.isHidden = false
 
-        // contentLabel 的底部约束 - 显式设置以确保正确的布局计算
-        // 无论是否有图片，contentLabel.bottom 都连接到 statsContainer.top 或 replyButton.top
+        // === 统一的约束链：contentLabel → statsContainer → [imagesContainer] → replyButton ===
+
+        // statsContainer 始终在链中，高度动态调整
+        statsContainer.isHidden = !isFloorOne
+        statsContainerHeightConstraint?.constant = isFloorOne ? 28 : 0
+
+        // contentLabel → statsContainer（始终激活）
+        contentLabelBottomConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
+        contentLabelBottomConstraint?.isActive = true
+
         if isFloorOne {
-            // 楼主贴：显示 statsContainer（回复数/浏览数）
-            statsContainer.isHidden = false
             replyLabel.text = "\(post.floorNumber)"
             viewLabel.text = "\(post.viewCount)"
+        }
 
-            if hasImages {
-                // 有图片：statsContainer -> imagesContainer -> replyButton
-                imagesContainer.isHidden = false
-                // contentLabel 底部连接到 statsContainer 顶部
-                contentLabelBottomConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
-                contentLabelBottomConstraint?.isActive = true
-                imagesContainerTopConstraint = imagesContainer.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 10)
-                imagesContainerTopConstraint?.isActive = true
-                imagesContainerBottomConstraint = imagesContainer.bottomAnchor.constraint(equalTo: replyButton.topAnchor, constant: -10)
-                imagesContainerBottomConstraint?.isActive = true
-            } else {
-                // 无图片：statsContainer -> replyButton
-                imagesContainer.isHidden = true
-                // contentLabel 底部连接到 statsContainer 顶部
-                contentLabelBottomConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
-                contentLabelBottomConstraint?.isActive = true
-            }
+        if hasImages {
+            // statsContainer → imagesContainer → replyButton
+            imagesContainer.isHidden = false
+            imagesContainerTopConstraint = imagesContainer.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 10)
+            imagesContainerTopConstraint?.isActive = true
+            imagesContainerBottomConstraint = imagesContainer.bottomAnchor.constraint(equalTo: replyButton.topAnchor, constant: -10)
+            imagesContainerBottomConstraint?.isActive = true
         } else {
-            // 回复贴：隐藏 statsContainer
-            statsContainer.isHidden = true
-
-            if hasImages {
-                // 有图片：imagesContainer -> replyButton
-                imagesContainer.isHidden = false
-                // contentLabel 底部连接到 imagesContainer 顶部
-                contentLabelBottomConstraint = imagesContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
-                contentLabelBottomConstraint?.isActive = true
-                imagesContainerTopConstraint = imagesContainer.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 10)
-                imagesContainerTopConstraint?.isActive = true
-                imagesContainerBottomConstraint = imagesContainer.bottomAnchor.constraint(equalTo: replyButton.topAnchor, constant: -10)
-                imagesContainerBottomConstraint?.isActive = true
-            } else {
-                // 无图片：contentLabel -> replyButton
-                imagesContainer.isHidden = true
-                // contentLabel 底部直接连接到 replyButton 顶部（跳过隐藏的 statsContainer）
-                contentLabelBottomConstraint = replyButton.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
-                contentLabelBottomConstraint?.isActive = true
-            }
+            // statsContainer → replyButton（跳过 imagesContainer）
+            imagesContainer.isHidden = true
+            replyButtonTopConstraint = replyButton.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 10)
+            replyButtonTopConstraint?.isActive = true
         }
 
         // Content with proper formatting

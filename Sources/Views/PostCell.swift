@@ -39,8 +39,8 @@ class PostCell: UITableViewCell {
     private var contentLabelBottomConstraint: NSLayoutConstraint?
     private var imagesContainerBottomConstraint: NSLayoutConstraint?
     private var imagesContainerTopConstraint: NSLayoutConstraint?
-    private var statsContainerTopConstraint: NSLayoutConstraint?
     private var replyButtonTopConstraint: NSLayoutConstraint?
+    private var statsContainerHeightConstraint: NSLayoutConstraint?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -307,8 +307,6 @@ class PostCell: UITableViewCell {
         imagesContainerBottomConstraint = nil
         imagesContainerTopConstraint?.isActive = false
         imagesContainerTopConstraint = nil
-        statsContainerTopConstraint?.isActive = false
-        statsContainerTopConstraint = nil
         replyButtonTopConstraint?.isActive = false
         replyButtonTopConstraint = nil
 
@@ -317,6 +315,8 @@ class PostCell: UITableViewCell {
         // 回复按钮始终显示，在最底部单独一行
         replyButton.isHidden = false
 
+        // contentLabel 的底部约束 - 显式设置以确保正确的布局计算
+        // 无论是否有图片，contentLabel.bottom 都连接到 statsContainer.top 或 replyButton.top
         if isFloorOne {
             // 楼主贴：显示 statsContainer（回复数/浏览数）
             statsContainer.isHidden = false
@@ -326,8 +326,9 @@ class PostCell: UITableViewCell {
             if hasImages {
                 // 有图片：statsContainer -> imagesContainer -> replyButton
                 imagesContainer.isHidden = false
-                statsContainerTopConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
-                statsContainerTopConstraint?.isActive = true
+                // contentLabel 底部连接到 statsContainer 顶部
+                contentLabelBottomConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
+                contentLabelBottomConstraint?.isActive = true
                 imagesContainerTopConstraint = imagesContainer.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 10)
                 imagesContainerTopConstraint?.isActive = true
                 imagesContainerBottomConstraint = imagesContainer.bottomAnchor.constraint(equalTo: replyButton.topAnchor, constant: -10)
@@ -335,28 +336,30 @@ class PostCell: UITableViewCell {
             } else {
                 // 无图片：statsContainer -> replyButton
                 imagesContainer.isHidden = true
-                statsContainerTopConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
-                statsContainerTopConstraint?.isActive = true
-                // statsContainer.bottomAnchor 连接到 replyButton.topAnchor（通过 replyButton 的 bottom 约束固定）
+                // contentLabel 底部连接到 statsContainer 顶部
+                contentLabelBottomConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
+                contentLabelBottomConstraint?.isActive = true
             }
         } else {
             // 回复贴：隐藏 statsContainer
             statsContainer.isHidden = true
-            statsContainerTopConstraint = statsContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
-            statsContainerTopConstraint?.isActive = true
 
             if hasImages {
                 // 有图片：imagesContainer -> replyButton
                 imagesContainer.isHidden = false
+                // contentLabel 底部连接到 imagesContainer 顶部
+                contentLabelBottomConstraint = imagesContainer.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
+                contentLabelBottomConstraint?.isActive = true
                 imagesContainerTopConstraint = imagesContainer.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 10)
                 imagesContainerTopConstraint?.isActive = true
                 imagesContainerBottomConstraint = imagesContainer.bottomAnchor.constraint(equalTo: replyButton.topAnchor, constant: -10)
                 imagesContainerBottomConstraint?.isActive = true
             } else {
-                // 无图片：contentLabel -> replyButton（statsContainer 被隐藏，高度为0）
+                // 无图片：contentLabel -> replyButton
                 imagesContainer.isHidden = true
-                replyButtonTopConstraint = replyButton.topAnchor.constraint(equalTo: statsContainer.bottomAnchor, constant: 10)
-                replyButtonTopConstraint?.isActive = true
+                // contentLabel 底部直接连接到 replyButton 顶部（跳过隐藏的 statsContainer）
+                contentLabelBottomConstraint = replyButton.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 10)
+                contentLabelBottomConstraint?.isActive = true
             }
         }
 
@@ -391,8 +394,6 @@ class PostCell: UITableViewCell {
         imagesContainerBottomConstraint = nil
         imagesContainerTopConstraint?.isActive = false
         imagesContainerTopConstraint = nil
-        statsContainerTopConstraint?.isActive = false
-        statsContainerTopConstraint = nil
         replyButtonTopConstraint?.isActive = false
         replyButtonTopConstraint = nil
         // 重置隐藏状态
@@ -447,18 +448,18 @@ class PostCell: UITableViewCell {
             view.removeFromSuperview()
         }
 
-        // Filter out GIF images - these are emoticons and should display inline in content
-        let filtered = imageURLs
-        filteredImageURLs = filtered
+        // Filter out GIF images and deduplicate
+        let uniqueURLs = Array(Set(imageURLs))
+        filteredImageURLs = uniqueURLs
 
-        if filtered.isEmpty {
+        if uniqueURLs.isEmpty {
             imagesContainer.isHidden = true
             return
         }
 
         imagesContainer.isHidden = false
 
-        for (index, imageURL) in filtered.prefix(3).enumerated() {
+        for (index, imageURL) in uniqueURLs.prefix(3).enumerated() {
             let imageView = UIImageView()
             imageView.contentMode = .scaleAspectFill
             imageView.backgroundColor = Theme.currentMuted

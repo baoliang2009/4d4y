@@ -256,8 +256,6 @@ class PostCell: UITableViewCell {
             // Stats container - 仅楼主贴显示，放在内容下方（动态约束）
             statsContainer.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 12),
             statsContainer.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
-            statsContainer.heightAnchor.constraint(equalToConstant: 28),
-
             replyCountView.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor, constant: 8),
             replyCountView.centerYAnchor.constraint(equalTo: statsContainer.centerYAnchor),
 
@@ -285,6 +283,10 @@ class PostCell: UITableViewCell {
             replyButton.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
             replyButton.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -12)
         ])
+
+        // Stats container height — saved as property for dynamic adjustment
+        statsContainerHeightConstraint = statsContainer.heightAnchor.constraint(equalToConstant: 28)
+        statsContainerHeightConstraint?.isActive = true
     }
 
     func configure(with post: ForumPost) {
